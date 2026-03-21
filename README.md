@@ -44,7 +44,7 @@ Hit a tree with any axe and the whole tree is chopped at once, logs fly away wit
 
 ## Installation
 
-1. Build the project or take the ready `TreeChopper-1.3.jar` and place it into your server `plugins` folder.
+1. Download `TreeChopper-1.3.jar` and place it into your server `plugins` folder.
 2. Restart the server.
 
 Additional notes:
@@ -100,7 +100,7 @@ Additional notes:
 
 ## Установка
 
-1. Собери проект или возьми готовый `TreeChopper-1.3.jar` и положи его в папку `plugins` сервера.
+1. Скачай `TreeChopper-1.3.jar` и положи его в папку `plugins` сервера.
 2. Перезапусти сервер.
 
 Дополнительно:
