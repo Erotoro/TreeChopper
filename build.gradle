@@ -1,0 +1,65 @@
+apply plugin: 'java'
+
+group = 'me.erotoro'
+version = '1.3'
+def paperApiVersion = '1.21.1-R0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+    exclusiveContent {
+        forRepository {
+            maven {
+                url = uri('https://repo.papermc.io/repository/maven-public/')
+            }
+        }
+        filter {
+            includeGroup('io.papermc.paper')
+            includeGroup('net.md-5')
+        }
+    }
+    exclusiveContent {
+        forRepository {
+            maven {
+                url = uri('https://libraries.minecraft.net')
+                metadataSources {
+                    mavenPom()
+                    artifact()
+                }
+            }
+        }
+        filter {
+            includeGroup('com.mojang')
+        }
+    }
+}
+
+dependencies {
+    compileOnly "io.papermc.paper:paper-api:${paperApiVersion}"
+    testImplementation "io.papermc.paper:paper-api:${paperApiVersion}"
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.12.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.12.1'
+}
+
+configurations.configureEach {
+    resolutionStrategy.activateDependencyLocking()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+}
+
+tasks.test {
+    useJUnitPlatform()
+}
+
+processResources {
+    filesMatching('plugin.yml') {
+        expand(version: project.version)
+    }
+}

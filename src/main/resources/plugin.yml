@@ -1,0 +1,16 @@
+name: TreeChopper
+version: ${version}
+main: me.erotoro.treechopper.TreeChopper
+api-version: '1.21'
+description: Plugin for instant tree chopping
+author: Erotoro
+folia-supported: true
+commands:
+  treechopper:
+    description: TreeChopper management commands
+    usage: /treechopper reload
+    permission: treechopper.reload
+permissions:
+  treechopper.reload:
+    description: Allows reloading TreeChopper data without restarting the server
+    default: op

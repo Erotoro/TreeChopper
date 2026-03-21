@@ -1,0 +1,17 @@
+limits:
+  max-logs: 512
+  leaf-search-radius: 6
+  foreign-log-scan-radius: 6
+
+performance:
+  max-blocks-per-task: 12
+
+detection:
+  min-leaf-contacts: 2
+  min-mega-leaf-contacts: 4
+  max-structure-contacts: 8
+
+storage:
+  max-placed-logs-file-bytes: 4194304
+  max-placed-log-entries: 200000
+  max-invalid-placed-log-warnings: 10
