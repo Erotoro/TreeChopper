@@ -1,3 +1,8 @@
+![Platform](https://img.shields.io/badge/platform-Paper%20%7C%20Spigot%20%7C%20Folia-green.svg)
+![Java](https://img.shields.io/badge/java-21%2B-orange.svg)
+![Version minecraft](https://img.shields.io/badge/Version_Minecraft_1.21+-red.svg)
+[![Support me](https://img.shields.io/badge/Support%20me-Ko--fi-ff5f5f?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/erotoro)
+
 # TreeChopper
 
 Lightweight Paper/Spigot/Folia plugin for instant tree chopping with a falling animation.
@@ -107,8 +112,3 @@ Additional notes:
 
 - после первого запуска появится `config.yml` с лимитами, настройками распознавания и storage-параметрами;
 - для применения изменений без рестарта можно использовать `/treechopper reload`.
-
----
-
-Supported me - https://ko-fi.com/erotoro
-Thx <3
