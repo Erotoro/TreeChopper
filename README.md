@@ -107,3 +107,8 @@ Additional notes:
 
 - после первого запуска появится `config.yml` с лимитами, настройками распознавания и storage-параметрами;
 - для применения изменений без рестарта можно использовать `/treechopper reload`.
+
+---
+
+Supported me - https://ko-fi.com/erotoro
+Thx <3
