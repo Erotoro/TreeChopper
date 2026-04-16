@@ -1,12 +1,14 @@
 package me.erotoro.treechopper.tree;
 
 import me.erotoro.treechopper.TreeChopperSettings;
+import me.erotoro.treechopper.coreprotect.CoreProtectService;
 import me.erotoro.treechopper.scheduler.TaskSchedulerFacade;
 import me.erotoro.treechopper.util.CoordinatePacker;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
 import org.bukkit.entity.Player;
 import org.bukkit.event.block.BlockBreakEvent;
 
@@ -26,13 +28,16 @@ public final class FoliageBreakService {
     private final TaskSchedulerFacade scheduler;
     private final int[][] neighborOffsets;
     private final BiFunction<Player, Block, BlockBreakEvent> syntheticBreakFactory;
+    private final CoreProtectService coreProtectService;
 
     public FoliageBreakService(TreeChopperSettings settings, TaskSchedulerFacade scheduler, int[][] neighborOffsets,
-                               BiFunction<Player, Block, BlockBreakEvent> syntheticBreakFactory) {
+                               BiFunction<Player, Block, BlockBreakEvent> syntheticBreakFactory,
+                               CoreProtectService coreProtectService) {
         this.settings = settings;
         this.scheduler = scheduler;
         this.neighborOffsets = neighborOffsets;
         this.syntheticBreakFactory = syntheticBreakFactory;
+        this.coreProtectService = coreProtectService;
     }
 
     public void breakFoliage(Player player, Set<Location> logPositions, Set<Block> treeBlocks, Material logType) {
@@ -106,11 +111,16 @@ public final class FoliageBreakService {
                     if (syntheticBreak.isCancelled()) {
                         continue;
                     }
+                    BlockState originalState = leaf.getState();
                     if (syntheticBreak.isDropItems()) {
                         leaf.breakNaturally();
                     } else {
                         leaf.setType(Material.AIR, false);
                     }
+                    if (!leaf.getType().isAir()) {
+                        continue;
+                    }
+                    coreProtectService.logRemoval(player.getName(), originalState);
                 }
             });
             layerIndex++;

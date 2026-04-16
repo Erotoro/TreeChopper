@@ -1,114 +1,367 @@
-![Platform](https://img.shields.io/badge/platform-Paper%20%7C%20Spigot%20%7C%20Folia-green.svg)
-![Java](https://img.shields.io/badge/java-21%2B-orange.svg)
-![Version minecraft](https://img.shields.io/badge/Version_Minecraft_1.21+-red.svg)
-[![Support me](https://img.shields.io/badge/Support%20me-Ko--fi-ff5f5f?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/erotoro)
+<div align="center">
 
-# TreeChopper
+# 🌲 TreeChopper
 
-Lightweight Paper/Spigot/Folia plugin for instant tree chopping with a falling animation.
+**One hit. Whole tree. Falling animation.**
 
-Hit a tree with any axe and the whole tree is chopped at once, logs fly away with physics, and leaves with attached tree vegetation break automatically.
+A lightweight Paper/Spigot/Folia plugin that fells entire trees with a single axe swing — logs collapse layer by layer with real physics, leaves decay automatically, and saplings replant themselves.
+
+[![Platform](https://img.shields.io/badge/platform-Paper%20%7C%20Spigot%20%7C%20Folia-brightgreen?style=flat-square)](https://papermc.io/)
+[![Minecraft](https://img.shields.io/badge/Minecraft-1.21%2B-red?style=flat-square)](https://modrinth.com/plugin/treechopper-ultra)
+[![Java](https://img.shields.io/badge/Java-21%2B-orange?style=flat-square)](https://adoptium.net/)
+[![Tests](https://img.shields.io/badge/tests-38%20passing-success?style=flat-square)](#)
+[![Ko-fi](https://img.shields.io/badge/Support%20me-Ko--fi-ff5f5f?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/erotoro)
+
+[Features](#features) · [How It Works](#how-it-works) · [Integrations](#integrations) · [Configuration](#configuration) · [Commands & Permissions](#commands--permissions) · [Installation](#installation)
+
+</div>
 
 ---
 
 ## Features
 
-- **One-hit tree chopping** — break one log with an axe and the whole tree falls
-- **Falling animation** — logs break layer by layer from top to bottom and spread out using `FallingBlock`
-- **Smart tree separation** — nearby trees are detected independently; chop one and the other stays intact with its leaves
-- **Automatic leaf decay** — leaves from the chopped tree break automatically after the logs fall; disputed leaves near another tree stay untouched
-- **Attached vegetation support** — vines and similar tree vegetation near the canopy or trunk are removed too
-- **2x2 mega tree support** — large jungle trees, spruce trees, and dark oak trees with a `2x2` trunk are detected and chopped as a whole
-- **All wood types** — oak, birch, spruce, jungle, dark oak, acacia, cherry, mangrove, crimson stem, warped stem, and mushroom stem
-- **Durability and Unbreaking support** — the axe takes durability damage for each broken log and Unbreaking is respected
-- **Placed log protection** — logs placed by players are stored in `placed-logs.yml` and do not trigger mass chopping
-- **Structure protection** — the detection logic tries to avoid treating village houses and other generated structures as natural trees
-- **Folia compatibility** — work is split into small batches and executed through a compatible scheduler
-- **Reload command** — `/treechopper reload` reloads config and stored data without a full server restart
+### Core mechanics
+- **One-hit felling** — break any log with an axe and the entire tree collapses instantly
+- **Falling animation** — logs break top-to-bottom and fly outward as `FallingBlock` entities with real physics
+- **Smart tree separation** — two adjacent trees are treated as independent; chop one and the other keeps all its leaves
+- **Automatic leaf decay** — leaves belonging to the chopped tree break after the logs fall; disputed leaves shared with a neighboring tree are left untouched
+- **Attached vegetation** — vines and similar canopy/trunk vegetation are cleaned up automatically
+- **2×2 mega tree support** — jungle, spruce, and dark oak mega trees are detected and felled as a single unit
+- **All vanilla wood types** — oak, birch, spruce, jungle, dark oak, acacia, cherry, mangrove, crimson stem, warped stem, and mushroom stem (including Nether fungi)
 
-## How It Works
+### Balance & safety
+- **Durability and Unbreaking** — the axe takes one durability hit per log; the Unbreaking enchantment is correctly accounted for probabilistically across the whole tree
+- **Fortune & Silk Touch** — enchantments on the axe apply to every log that falls, not just the first one
+- **Player-placed log protection** — blocks placed by players are tracked in `placed-logs.yml` and never trigger mass felling, preventing griefing with stacked logs
+- **Structure protection** — heuristic detection avoids treating village houses and other generated structures as natural trees
+- **Sneak activation mode** — configurable: always active, active only while sneaking, or disabled while sneaking
+- **Per-player toggle** — each player can enable or disable the mechanic for themselves with `/treechopper toggle`; state persists across sessions
 
-1. A player breaks a log with any axe.
-2. The plugin traces the trunk down to the base and up to the top.
-3. It checks for a `2x2` mega trunk at the base level.
-4. It collects the tree through connected-log search with restrictions:
-   - only the same wood type;
-   - horizontal distance is limited from the trunk axis;
-   - branches cannot drop below the lower part of the tree;
-   - some downward diagonal steps are blocked.
-5. It checks whether the found structure looks like a natural tree and not a building.
-6. Logs are broken with a falling animation, while respecting drops and other plugins through synthetic `BlockBreakEvent`s.
-7. Leaves and attached vegetation are collected separately and broken in layers after the logs fall.
-8. For disputed leaves, a 3D ownership check compares distance to the current trunk and foreign trunks so nearby trees are not damaged.
+### Server compatibility
+- **Folia support** — work is split into per-chunk batches and scheduled through the Region Scheduler (with Bukkit scheduler fallback), making TreeChopper fully compatible with Folia's threaded region model
+- **WorldGuard & GriefPrevention** — felling is blocked inside protected regions; the plugin respects both `CanBuildQuery` and claim ownership checks before breaking any block
+- **CoreProtect logging** — every log and leaf broken by the plugin is recorded under the player's name, so `/co rollback` and `/co lookup` work correctly for the full tree
+- **Auto-replant** — after a tree is felled a sapling is automatically placed at the base; supports mega trees, configurable inventory consumption, and protection-aware placement
 
-## Requirements
-
-- **Server software:** Paper, Spigot, or Folia
-- **Java:** 21+
-- **Minecraft version:** 1.21+
-
-## Installation
-
-1. Download `TreeChopper-1.3.jar` and place it into your server `plugins` folder.
-2. Restart the server.
-
-Additional notes:
-
-- after first launch, `config.yml` will be created with limits, detection settings, and storage parameters;
-- to apply changes without restarting, use `/treechopper reload`.
+### Performance
+- **Chunk-batched scheduling** — blocks are grouped by chunk and processed in small batches per tick, keeping TPS impact minimal even on large trees
+- **Configurable limits** — `max-logs`, `max-blocks-per-task`, BFS radii, and detection thresholds are all tunable in `config.yml`
+- **Hot reload** — `/treechopper reload` reloads config, localization, and all services without a server restart
 
 ---
 
-# TreeChopper
+## How It Works
 
-Легковесный плагин для Paper/Spigot/Folia: мгновенная рубка деревьев с анимацией падения.
+```
+Player breaks a log with an axe
+    │
+    ├─ Checks: sneak mode · player toggle · axe durability
+    │
+    ├─ Traces the trunk down to its base, then up
+    │       └─ Detects 2×2 mega trunk at base level
+    │
+    ├─ BFS collects all connected logs of the same wood type
+    │       └─ Restricted by: horizontal distance from axis · branch height · diagonal rules
+    │
+    ├─ NaturalTreeChecker validates the structure against known structure patterns
+    │
+    ├─ ProtectionService checks WorldGuard / GriefPrevention for every block
+    │
+    ├─ BreakPlan is built — hit block first, then remaining logs sorted top-to-bottom
+    │       └─ Durability damage modeled probabilistically per Unbreaking level
+    │
+    ├─ Animation runs — logs fall layer by layer as FallingBlock entities
+    │       └─ Each block fires a synthetic BlockBreakEvent so other plugins can react
+    │
+    └─ After all logs land:
+            ├─ Leaves & attached vegetation are collected via BFS and broken in layers
+            │       └─ Ownership check prevents touching leaves shared with a neighboring tree
+            └─ Auto-replant places the correct sapling at the base (if enabled)
+```
 
-Ударь по дереву любым топором, и всё дерево сломается сразу, брёвна разлетятся с физикой, а листва и связанная растительность распадутся автоматически.
+---
+
+## Integrations
+
+| Plugin | What it does |
+|---|---|
+| **WorldGuard** | Blocks felling inside protected regions |
+| **GriefPrevention** | Blocks felling inside claimed land |
+| **CoreProtect** | Logs every broken block and replanted sapling under the player's name |
+
+All integrations are **soft dependencies** — the plugin works perfectly without any of them installed.
+
+---
+
+## Configuration
+
+<details>
+<summary><b>config.yml — full reference</b></summary>
+
+```yaml
+language:
+  default: en          # en · ru · uk
+  fallback: en
+
+limits:
+  max-logs: 512                  # hard cap on logs per fell
+  leaf-search-radius: 6          # BFS depth for connected leaves
+  foreign-log-scan-radius: 8     # radius for neighboring-tree detection
+
+performance:
+  max-blocks-per-task: 16        # blocks broken per scheduler tick
+
+activation:
+  mode: SNEAK_DISABLE            # ALWAYS_ON · SNEAK_DISABLE · SNEAK_ENABLE
+
+player-toggle:
+  enabled: true
+  default-enabled: true
+  save-on-change: true
+
+detection:
+  min-leaf-contacts: 4
+  min-mega-leaf-contacts: 8
+  max-structure-contacts: 4
+
+storage:
+  max-placed-logs-file-bytes: 5242880
+  max-placed-log-entries: 100000
+  max-invalid-placed-log-warnings: 10
+
+protection:
+  enabled: true
+  check-breaks: true
+  check-placement: true
+  mode: FAIL_WHOLE_TREE
+  use-worldguard: true
+  use-griefprevention: true
+  debug: false
+
+integrations:
+  coreprotect:
+    enabled: true
+    debug: false
+
+auto-replant:
+  enabled: true
+  require-sapling: false         # take sapling from player's inventory
+  consume-sapling: false
+  delay-ticks-after-fell: 20
+  replant-mega-trees: true
+  mega-mode: four-saplings       # single · four-saplings
+  respect-protection: true
+  only-natural-trees: true
+  disabled-worlds: []
+  debug: false
+```
+
+</details>
+
+---
+
+## Commands & Permissions
+
+| Command | Permission | Default | Description |
+|---|---|---|---|
+| `/treechopper reload` | `treechopper.reload` | op | Reloads config, localization, and all services |
+| `/treechopper toggle` | `treechopper.toggle` | everyone | Enables or disables tree chopping for yourself |
+
+---
+
+## Installation
+
+1. Download `TreeChopper-1.4.jar` and drop it into your server `plugins/` folder.
+2. Restart the server — `config.yml` and language files are created automatically.
+3. Adjust settings in `config.yml` as needed.
+4. Apply changes without restarting: `/treechopper reload`
+
+**Requirements:** Paper, Spigot, or Folia · Java 21+ · Minecraft 1.21+
+
+---
+
+## Localization
+
+TreeChopper ships with built-in translations for **English**, **Russian**, and **Ukrainian**. Language files live in `plugins/TreeChopper/lang/` and can be edited freely. Set your preferred language in `config.yml` under `language.default`.
+
+---
+
+<div align="center">
+
+---
+
+# 🌲 TreeChopper
+
+**Один удар. Всё дерево. Анимация падения.**
+
+Лёгкий плагин для Paper/Spigot/Folia: руби деревья одним ударом топора — брёвна падают слой за слоем с физикой, листва распадается автоматически, а саженцы подсаживаются сами.
+
+</div>
 
 ---
 
 ## Возможности
 
-- **Рубка одним ударом** — сломай одно бревно топором, и всё дерево упадёт
-- **Анимация падения** — брёвна ломаются послойно сверху вниз и разлетаются в стороны через `FallingBlock`
-- **Умное разделение деревьев** — два дерева рядом определяются независимо; рубишь одно, второе остаётся целым со своей листвой
-- **Автоматический распад листвы** — листва срубленного дерева ломается автоматически после падения брёвен; спорные листья рядом с другим деревом сохраняются
-- **Связанная растительность** — лианы и похожая древесная растительность рядом с кроной и стволом тоже убираются
-- **Поддержка мега-деревьев 2x2** — большие тропические деревья, ели и тёмный дуб со стволом `2x2` определяются и рубятся целиком
+### Основная механика
+- **Рубка одним ударом** — сломай любое бревно топором, и всё дерево упадёт
+- **Анимация падения** — брёвна ломаются сверху вниз и разлетаются через `FallingBlock` с физикой
+- **Умное разделение деревьев** — два дерева рядом обрабатываются независимо; рубишь одно — второе остаётся нетронутым со своей листвой
+- **Автоматический распад листвы** — листва срубленного дерева ломается сама; спорные листья рядом с соседним деревом сохраняются
+- **Связанная растительность** — лианы и похожая растительность рядом с кроной и стволом убираются автоматически
+- **Поддержка мега-деревьев 2×2** — большие тропические деревья, ели и тёмный дуб со стволом 2×2 определяются и рубятся целиком
 - **Все типы древесины** — дуб, берёза, ель, тропическое дерево, тёмный дуб, акация, вишня, мангровое дерево, багровый и искажённый стебель, грибной стебель
-- **Прочность и Нерушимость** — топор получает урон за каждое сломанное бревно, зачарование Нерушимость учитывается
-- **Защита поставленных блоков** — брёвна, поставленные игроком, сохраняются в `placed-logs.yml` и не запускают массовую рубку
-- **Защита структур** — логика распознавания старается не считать деревнями, домами и другими постройками обычные деревья
-- **Совместимость с Folia** — задачи разбиваются на небольшие пачки и запускаются через совместимый scheduler
-- **Команда перезагрузки** — `/treechopper reload` перечитывает конфиг и данные без полного рестарта сервера
 
-## Как Это Работает
+### Баланс и безопасность
+- **Прочность и Нерушимость** — топор получает урон за каждое бревно; зачарование Нерушимость учитывается вероятностно по всему дереву
+- **Fortune и Silk Touch** — зачарования топора применяются ко всем упавшим брёвнам, а не только к первому
+- **Защита поставленных блоков** — брёвна, поставленные игроком, не запускают массовую рубку; хранятся в `placed-logs.yml`
+- **Защита структур** — эвристика не позволяет плагину воспринимать дома деревень и другие постройки как деревья
+- **Режим активации** — настраивается: всегда, только при приседании или отключается приседанием
+- **Персональный тоггл** — каждый игрок может включить или отключить механику для себя через `/treechopper toggle`; состояние сохраняется между сессиями
 
-1. Игрок ломает бревно любым топором.
-2. Плагин трассирует ствол вниз до основания и вверх до верхушки.
-3. Проверяет наличие мега-ствола `2x2` на уровне основания.
-4. Собирает дерево через поиск связанных брёвен с ограничениями:
-   - только тот же тип древесины;
-   - ограничение по горизонтальному расстоянию от оси ствола;
-   - ветки не опускаются ниже нижней части дерева;
-   - запрещены некоторые диагональные шаги вниз.
-5. Проверяет, похоже ли найденное образование на натуральное дерево, а не на структуру.
-6. Брёвна ломаются с анимацией падения послойно, с учётом дропа и защиты других плагинов через синтетические `BlockBreakEvent`.
-7. Листва и связанная растительность собираются отдельно и ломаются по слоям после падения брёвен.
-8. Для спорной листвы выполняется 3D-проверка принадлежности: лист сравнивается с расстоянием до своего и чужого ствола, и соседние деревья не задеваются.
+### Совместимость с сервером
+- **Folia** — задачи разбиваются на батчи по чанкам и выполняются через Region Scheduler (с fallback на Bukkit scheduler)
+- **WorldGuard и GriefPrevention** — рубка блокируется внутри защищённых регионов и захваченных территорий
+- **CoreProtect** — каждое сломанное бревно и посаженный саженец логируются под именем игрока; `/co rollback` работает корректно для всего дерева
+- **Авто-посадка** — после рубки саженец автоматически высаживается у основания; поддержка мега-деревьев, настраиваемый расход инвентаря, уважение защиты
 
-## Требования
+### Производительность
+- **Батчинг по чанкам** — блоки группируются по чанкам и обрабатываются небольшими порциями за тик
+- **Настраиваемые лимиты** — `max-logs`, `max-blocks-per-task`, радиусы BFS и пороги детекции задаются в `config.yml`
+- **Горячая перезагрузка** — `/treechopper reload` перезагружает конфиг, локализацию и все сервисы без рестарта
 
-- **Ядра:** Paper, Spigot или Folia
-- **Java:** 21+
-- **Версия Minecraft:** 1.21+
+---
+
+## Как это работает
+
+```
+Игрок ломает бревно топором
+    │
+    ├─ Проверки: режим активации · тоггл игрока · прочность топора
+    │
+    ├─ Трассировка ствола вниз до основания и вверх до верхушки
+    │       └─ Определение мега-ствола 2×2 на уровне основания
+    │
+    ├─ BFS собирает все связанные брёвна того же типа
+    │       └─ Ограничения: расстояние от оси · высота веток · диагональные шаги
+    │
+    ├─ NaturalTreeChecker проверяет, не является ли структура постройкой
+    │
+    ├─ ProtectionService проверяет WorldGuard / GriefPrevention для каждого блока
+    │
+    ├─ Формируется BreakPlan — сначала ударный блок, потом остальные сверху вниз
+    │       └─ Урон прочности рассчитывается вероятностно с учётом Нерушимости
+    │
+    ├─ Анимация — брёвна падают слоями как FallingBlock-сущности
+    │       └─ Каждый блок вызывает синтетический BlockBreakEvent для других плагинов
+    │
+    └─ После приземления брёвен:
+            ├─ Листва и растительность собираются через BFS и ломаются по слоям
+            │       └─ 3D-проверка принадлежности не трогает листья соседних деревьев
+            └─ Авто-посадка высаживает подходящий саженец у основания (если включена)
+```
+
+---
+
+## Интеграции
+
+| Плагин | Что делает |
+|---|---|
+| **WorldGuard** | Блокирует рубку внутри защищённых регионов |
+| **GriefPrevention** | Блокирует рубку внутри захваченных территорий |
+| **CoreProtect** | Логирует каждый сломанный блок и посаженный саженец на имя игрока |
+
+Все интеграции — **мягкие зависимости**: плагин работает без них.
+
+---
+
+## Конфигурация
+
+<details>
+<summary><b>config.yml — полный справочник</b></summary>
+
+```yaml
+language:
+  default: ru          # en · ru · uk
+  fallback: en
+
+limits:
+  max-logs: 512                  # максимум брёвен за одну рубку
+  leaf-search-radius: 6          # глубина BFS для связной листвы
+  foreign-log-scan-radius: 8     # радиус обнаружения соседних деревьев
+
+performance:
+  max-blocks-per-task: 16        # блоков за один тик планировщика
+
+activation:
+  mode: SNEAK_DISABLE            # ALWAYS_ON · SNEAK_DISABLE · SNEAK_ENABLE
+
+player-toggle:
+  enabled: true
+  default-enabled: true
+  save-on-change: true
+
+detection:
+  min-leaf-contacts: 4
+  min-mega-leaf-contacts: 8
+  max-structure-contacts: 4
+
+storage:
+  max-placed-logs-file-bytes: 5242880
+  max-placed-log-entries: 100000
+  max-invalid-placed-log-warnings: 10
+
+protection:
+  enabled: true
+  check-breaks: true
+  check-placement: true
+  mode: FAIL_WHOLE_TREE
+  use-worldguard: true
+  use-griefprevention: true
+  debug: false
+
+integrations:
+  coreprotect:
+    enabled: true
+    debug: false
+
+auto-replant:
+  enabled: true
+  require-sapling: false         # брать саженец из инвентаря игрока
+  consume-sapling: false
+  delay-ticks-after-fell: 20
+  replant-mega-trees: true
+  mega-mode: four-saplings       # single · four-saplings
+  respect-protection: true
+  only-natural-trees: true
+  disabled-worlds: []
+  debug: false
+```
+
+</details>
+
+---
+
+## Команды и права
+
+| Команда | Право | По умолчанию | Описание |
+|---|---|---|---|
+| `/treechopper reload` | `treechopper.reload` | op | Перезагружает конфиг, локализацию и все сервисы |
+| `/treechopper toggle` | `treechopper.toggle` | все игроки | Включает или отключает рубку деревьев для себя |
+
+---
 
 ## Установка
 
-1. Скачай `TreeChopper-1.3.jar` и положи его в папку `plugins` сервера.
-2. Перезапусти сервер.
+1. Скачай `TreeChopper-1.4.jar` и положи его в папку `plugins/` сервера.
+2. Перезапусти сервер — `config.yml` и языковые файлы создадутся автоматически.
+3. Настрой параметры в `config.yml` под свой сервер.
+4. Применяй изменения без рестарта: `/treechopper reload`
 
-Дополнительно:
+**Требования:** Paper, Spigot или Folia · Java 21+ · Minecraft 1.21+
 
-- после первого запуска появится `config.yml` с лимитами, настройками распознавания и storage-параметрами;
-- для применения изменений без рестарта можно использовать `/treechopper reload`.
+---
+
+## Локализация
+
+TreeChopper поставляется с встроенными переводами на **английский**, **русский** и **украинский** языки. Файлы лежат в `plugins/TreeChopper/lang/` и редактируются свободно. Выбери язык в `config.yml` в разделе `language.default`.

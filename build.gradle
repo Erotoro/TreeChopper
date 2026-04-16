@@ -1,7 +1,7 @@
 apply plugin: 'java'
 
 group = 'me.erotoro'
-version = '1.3'
+version = '1.4'
 def paperApiVersion = '1.21.1-R0.1-SNAPSHOT'
 
 java {
@@ -12,37 +12,44 @@ java {
 
 repositories {
     mavenCentral()
-    exclusiveContent {
-        forRepository {
-            maven {
-                url = uri('https://repo.papermc.io/repository/maven-public/')
-            }
-        }
-        filter {
-            includeGroup('io.papermc.paper')
-            includeGroup('net.md-5')
+    maven {
+        url = uri('https://maven.enginehub.org/repo/')
+        metadataSources {
+            mavenPom()
+            artifact()
         }
     }
-    exclusiveContent {
-        forRepository {
-            maven {
-                url = uri('https://libraries.minecraft.net')
-                metadataSources {
-                    mavenPom()
-                    artifact()
-                }
-            }
+    maven {
+        url = uri('https://jitpack.io')
+        metadataSources {
+            mavenPom()
+            artifact()
         }
-        filter {
-            includeGroup('com.mojang')
+    }
+    maven {
+        url = uri('https://repo.papermc.io/repository/maven-public/')
+    }
+    maven {
+        url = uri('https://maven.playpro.com')
+    }
+    maven {
+        url = uri('https://libraries.minecraft.net')
+        metadataSources {
+            mavenPom()
+            artifact()
         }
     }
 }
 
 dependencies {
     compileOnly "io.papermc.paper:paper-api:${paperApiVersion}"
+    compileOnly "com.sk89q.worldguard:worldguard-bukkit:7.0.16"
+    compileOnly "com.github.GriefPrevention:GriefPrevention:16.18.7"
+    compileOnly "net.coreprotect:coreprotect:23.1"
     testImplementation "io.papermc.paper:paper-api:${paperApiVersion}"
     testImplementation 'org.junit.jupiter:junit-jupiter:5.12.1'
+    testImplementation 'org.mockito:mockito-core:5.18.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.18.0'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.12.1'
 }
 

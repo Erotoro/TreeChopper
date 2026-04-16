@@ -1,3 +1,7 @@
+language:
+  default: en
+  fallback: en
+
 limits:
   max-logs: 512
   leaf-search-radius: 6
@@ -5,6 +9,14 @@ limits:
 
 performance:
   max-blocks-per-task: 12
+
+activation:
+  mode: SNEAK_DISABLE
+
+player-toggle:
+  enabled: true
+  default-enabled: true
+  save-on-change: true
 
 detection:
   min-leaf-contacts: 2
@@ -15,3 +27,51 @@ storage:
   max-placed-logs-file-bytes: 4194304
   max-placed-log-entries: 200000
   max-invalid-placed-log-warnings: 10
+
+protection:
+  enabled: true
+  check-breaks: true
+  check-placement: true
+  mode: FAIL_WHOLE_TREE
+  use-worldguard: true
+  use-griefprevention: true
+  debug: false
+
+integrations:
+  coreprotect:
+    enabled: true
+    debug: false
+
+# Auto-replant settings are applied after the full tree-felling sequence completes.
+auto-replant:
+  # Master switch for auto-replanting after a successful tree chop.
+  enabled: false
+
+  # Require matching saplings/propagules (or fungi for nether stems) in player inventory.
+  require-sapling: true
+
+  # Consume required saplings/propagules from inventory when replant succeeds.
+  consume-sapling: true
+
+  # Extra delay after all logs are processed (in ticks) before replant attempt.
+  delay-ticks-after-fell: 2
+
+  # Enable replant attempts for 2x2 mega trees.
+  replant-mega-trees: false
+
+  # Mega tree strategy:
+  # single -> plant one sapling at one trunk base (conservative default)
+  # four-saplings -> require and plant all four trunk bases
+  mega-mode: single
+
+  # Fire BlockPlaceEvent pre-check so protection plugins can deny replant.
+  respect-protection: true
+
+  # Restrict replant to trees validated as natural by the detection pipeline.
+  only-natural-trees: true
+
+  # Skip auto-replant in these worlds (case-insensitive names).
+  disabled-worlds: []
+
+  # Debug logging for auto-replant decisions.
+  debug: false

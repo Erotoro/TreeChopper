@@ -1,0 +1,12 @@
+messages:
+  command:
+    usage: "&eВикористання: /{label} <reload|toggle>"
+    reload:
+      success: "&aTreeChopper перезавантажено. Завантажено позначених колод: {placedLogs}, завантажено перемикачів гравців: {playerToggles}."
+    toggle:
+      enabled: "&aTreeChopper увімкнено."
+      disabled: "&cTreeChopper вимкнено."
+      feature-disabled: "&cФункцію перемикання TreeChopper вимкнено у конфігурації."
+  errors:
+    no-permission: "&cУ вас немає прав для використання цієї команди."
+    player-only: "&cЦю команду можуть використовувати лише гравці."

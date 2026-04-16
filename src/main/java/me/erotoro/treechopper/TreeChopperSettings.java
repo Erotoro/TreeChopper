@@ -1,6 +1,11 @@
 package me.erotoro.treechopper;
 
+import me.erotoro.treechopper.coreprotect.CoreProtectIntegrationSettings;
+import me.erotoro.treechopper.replant.AutoReplantSettings;
+import me.erotoro.treechopper.protection.ProtectionSettings;
+import me.erotoro.treechopper.toggle.PlayerToggleSettings;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.Player;
 
 public record TreeChopperSettings(
         int maxLogs,
@@ -12,7 +17,12 @@ public record TreeChopperSettings(
         int maxStructureContacts,
         long maxPlacedLogsFileBytes,
         int maxPlacedLogEntries,
-        int maxInvalidPlacedLogWarnings
+        int maxInvalidPlacedLogWarnings,
+        ActivationMode activationMode,
+        AutoReplantSettings autoReplant,
+        ProtectionSettings protection,
+        CoreProtectIntegrationSettings coreProtect,
+        PlayerToggleSettings playerToggle
 ) {
     public static final TreeChopperSettings DEFAULT = new TreeChopperSettings(
             512,
@@ -24,7 +34,12 @@ public record TreeChopperSettings(
             3,
             4L * 1024L * 1024L,
             200_000,
-            10
+            10,
+            ActivationMode.SNEAK_DISABLE,
+            AutoReplantSettings.DEFAULT,
+            ProtectionSettings.DEFAULT,
+            CoreProtectIntegrationSettings.DEFAULT,
+            PlayerToggleSettings.DEFAULT
     );
 
     public static TreeChopperSettings load(FileConfiguration config) {
@@ -38,8 +53,21 @@ public record TreeChopperSettings(
                 positiveInt(config, "detection.max-structure-contacts", DEFAULT.maxStructureContacts),
                 positiveLong(config, "storage.max-placed-logs-file-bytes", DEFAULT.maxPlacedLogsFileBytes),
                 positiveInt(config, "storage.max-placed-log-entries", DEFAULT.maxPlacedLogEntries),
-                positiveInt(config, "storage.max-invalid-placed-log-warnings", DEFAULT.maxInvalidPlacedLogWarnings)
+                positiveInt(config, "storage.max-invalid-placed-log-warnings", DEFAULT.maxInvalidPlacedLogWarnings),
+                ActivationMode.parse(config.getString("activation.mode"), DEFAULT.activationMode),
+                AutoReplantSettings.load(config),
+                ProtectionSettings.load(config),
+                CoreProtectIntegrationSettings.load(config),
+                PlayerToggleSettings.load(config)
         );
+    }
+
+    public boolean shouldActivateFor(Player player) {
+        return switch (activationMode) {
+            case ALWAYS_ON -> true;
+            case SNEAK_DISABLE -> !player.isSneaking();
+            case SNEAK_ENABLE -> player.isSneaking();
+        };
     }
 
     private static int positiveInt(FileConfiguration config, String path, int fallback) {

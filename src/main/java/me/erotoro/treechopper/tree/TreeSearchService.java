@@ -33,7 +33,7 @@ public final class TreeSearchService {
         Material logType = start.getType();
         Set<Material> associatedLeaves = TreeMaterials.getAssociatedLeafTypes(logType);
         if (playerPlacedLogs.contains(BlockKey.of(start))) {
-            return new TreeSearchResult(Set.of(start), false, true, logType);
+            return new TreeSearchResult(Set.of(start), Set.of(BlockKey.of(start)), false, true, false, logType);
         }
 
         int trunkX = start.getX();
@@ -46,6 +46,10 @@ public final class TreeSearchService {
 
         List<int[]> trunkColumns = findTrunkColumns(world, logType, baseY, trunkX, trunkZ);
         boolean isMega = trunkColumns.size() == 4;
+        Set<BlockKey> trunkBaseBlocks = new LinkedHashSet<>(trunkColumns.size());
+        for (int[] column : trunkColumns) {
+            trunkBaseBlocks.add(new BlockKey(world.getUID(), column[0], baseY, column[1]));
+        }
         Set<Block> treeBlocks = new LinkedHashSet<>();
         int topY = baseY;
 
@@ -54,7 +58,7 @@ public final class TreeSearchService {
             while (world.getBlockAt(column[0], y, column[1]).getType() == logType) {
                 Block block = world.getBlockAt(column[0], y, column[1]);
                 if (playerPlacedLogs.contains(BlockKey.of(block))) {
-                    return new TreeSearchResult(treeBlocks, false, true, logType);
+                    return new TreeSearchResult(treeBlocks, trunkBaseBlocks, false, true, isMega, logType);
                 }
                 treeBlocks.add(block);
                 topY = Math.max(topY, y);
@@ -95,7 +99,7 @@ public final class TreeSearchService {
 
         boolean hasLeafEvidence = nearbyLeaves.size() >= requiredLeafContacts;
         if (!NaturalTreeChecker.looksLikeNaturalTree(world, trunkColumns, baseY, topY, logType, associatedLeaves, settings, cardinalOffsets, hasLeafEvidence)) {
-            return new TreeSearchResult(treeBlocks, false, false, logType);
+            return new TreeSearchResult(treeBlocks, trunkBaseBlocks, false, false, isMega, logType);
         }
 
         while (!queue.isEmpty() && treeBlocks.size() < maxBreaks && treeBlocks.size() < settings.maxLogs()) {
@@ -124,7 +128,7 @@ public final class TreeSearchService {
                         continue;
                     }
                     if (playerPlacedLogs.contains(BlockKey.of(neighbor))) {
-                        return new TreeSearchResult(treeBlocks, nearbyLeaves.size() >= requiredLeafContacts, true, logType);
+                        return new TreeSearchResult(treeBlocks, trunkBaseBlocks, nearbyLeaves.size() >= requiredLeafContacts, true, isMega, logType);
                     }
 
                     treeBlocks.add(neighbor);
@@ -135,7 +139,7 @@ public final class TreeSearchService {
             }
         }
 
-        return new TreeSearchResult(treeBlocks, nearbyLeaves.size() >= requiredLeafContacts, false, logType);
+        return new TreeSearchResult(treeBlocks, trunkBaseBlocks, nearbyLeaves.size() >= requiredLeafContacts, false, isMega, logType);
     }
 
     private List<int[]> findTrunkColumns(World world, Material logType, int baseY, int trunkX, int trunkZ) {

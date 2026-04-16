@@ -1,0 +1,12 @@
+messages:
+  command:
+    usage: "&eUsage: /{label} <reload|toggle>"
+    reload:
+      success: "&aTreeChopper reloaded. Loaded placed logs: {placedLogs}, loaded player toggles: {playerToggles}."
+    toggle:
+      enabled: "&aTreeChopper enabled."
+      disabled: "&cTreeChopper disabled."
+      feature-disabled: "&cTreeChopper toggle feature is disabled in config."
+  errors:
+    no-permission: "&cYou do not have permission to use this command."
+    player-only: "&cOnly players can use this command."
