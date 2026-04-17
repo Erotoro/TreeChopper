@@ -520,13 +520,11 @@ public final class TreeChopper extends JavaPlugin implements Listener {
         coreProtectService.logRemoval(player.getName(), originalState);
 
         Location spawnLocation = blockLocation.clone().add(0.5, 0.0, 0.5);
-        FallingBlock fallingBlock = block.getWorld().spawn(spawnLocation, FallingBlock.class, entity -> {
-            entity.setBlockData(data);
-            entity.setDropItem(false);
-            entity.setHurtEntities(false);
-            entity.setGravity(true);
-            entity.addScoreboardTag(FB_TAG);
-        });
+        FallingBlock fallingBlock = spawnFallingBlockCompat(block, spawnLocation, data);
+        fallingBlock.setDropItem(false);
+        fallingBlock.setHurtEntities(false);
+        fallingBlock.setGravity(true);
+        fallingBlock.addScoreboardTag(FB_TAG);
 
         double spreadX = spawnLocation.getX() - centerX;
         double spreadZ = spawnLocation.getZ() - centerZ;
@@ -538,6 +536,13 @@ public final class TreeChopper extends JavaPlugin implements Listener {
 
         activeFallingBlocks.add(fallingBlock.getUniqueId());
         scheduler.scheduleDelayed(spawnLocation, 60L, () -> cleanupFallingBlock(fallingBlock));
+    }
+
+    @SuppressWarnings("deprecation")
+    private FallingBlock spawnFallingBlockCompat(Block sourceBlock, Location spawnLocation, BlockData data) {
+        // Spigot API (1.21.x baseline for universal JAR) does not provide a stable non-deprecated
+        // alternative that allows setting the exact falling block data at spawn time.
+        return sourceBlock.getWorld().spawnFallingBlock(spawnLocation, data);
     }
 
     private boolean isLog(Block block) {

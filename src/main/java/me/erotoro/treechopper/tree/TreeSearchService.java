@@ -98,7 +98,9 @@ public final class TreeSearchService {
         }
 
         boolean hasLeafEvidence = nearbyLeaves.size() >= requiredLeafContacts;
-        if (!NaturalTreeChecker.looksLikeNaturalTree(world, trunkColumns, baseY, topY, logType, associatedLeaves, settings, cardinalOffsets, hasLeafEvidence)) {
+        boolean deferNaturalValidationForAcacia = logType == Material.ACACIA_LOG && !hasLeafEvidence;
+        if (!deferNaturalValidationForAcacia
+                && !NaturalTreeChecker.looksLikeNaturalTree(world, trunkColumns, baseY, topY, logType, associatedLeaves, settings, cardinalOffsets, hasLeafEvidence)) {
             return new TreeSearchResult(treeBlocks, trunkBaseBlocks, false, false, isMega, logType);
         }
 
@@ -139,7 +141,13 @@ public final class TreeSearchService {
             }
         }
 
-        return new TreeSearchResult(treeBlocks, trunkBaseBlocks, nearbyLeaves.size() >= requiredLeafContacts, false, isMega, logType);
+        boolean finalLeafEvidence = nearbyLeaves.size() >= requiredLeafContacts;
+        if (deferNaturalValidationForAcacia
+                && !NaturalTreeChecker.looksLikeNaturalTree(world, trunkColumns, baseY, topY, logType, associatedLeaves, settings, cardinalOffsets, finalLeafEvidence)) {
+            return new TreeSearchResult(treeBlocks, trunkBaseBlocks, false, false, isMega, logType);
+        }
+
+        return new TreeSearchResult(treeBlocks, trunkBaseBlocks, finalLeafEvidence, false, isMega, logType);
     }
 
     private List<int[]> findTrunkColumns(World world, Material logType, int baseY, int trunkX, int trunkZ) {

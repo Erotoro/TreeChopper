@@ -1,8 +1,8 @@
 apply plugin: 'java'
 
 group = 'me.erotoro'
-version = '1.4'
-def paperApiVersion = '1.21.1-R0.1-SNAPSHOT'
+version = '1.4.1'
+def spigotApiVersion = '1.21.1-R0.1-SNAPSHOT'
 
 java {
     toolchain {
@@ -30,6 +30,9 @@ repositories {
         url = uri('https://repo.papermc.io/repository/maven-public/')
     }
     maven {
+        url = uri('https://hub.spigotmc.org/nexus/content/repositories/snapshots/')
+    }
+    maven {
         url = uri('https://maven.playpro.com')
     }
     maven {
@@ -42,11 +45,11 @@ repositories {
 }
 
 dependencies {
-    compileOnly "io.papermc.paper:paper-api:${paperApiVersion}"
+    compileOnly "org.spigotmc:spigot-api:${spigotApiVersion}"
     compileOnly "com.sk89q.worldguard:worldguard-bukkit:7.0.16"
     compileOnly "com.github.GriefPrevention:GriefPrevention:16.18.7"
     compileOnly "net.coreprotect:coreprotect:23.1"
-    testImplementation "io.papermc.paper:paper-api:${paperApiVersion}"
+    testImplementation "org.spigotmc:spigot-api:${spigotApiVersion}"
     testImplementation 'org.junit.jupiter:junit-jupiter:5.12.1'
     testImplementation 'org.mockito:mockito-core:5.18.0'
     testImplementation 'org.mockito:mockito-junit-jupiter:5.18.0'
