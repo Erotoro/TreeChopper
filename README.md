@@ -171,12 +171,12 @@ auto-replant:
 
 ## Installation
 
-1. Download `TreeChopper-1.4.jar` and drop it into your server `plugins/` folder.
+1. Download `TreeChopper-1.4.1.jar` and drop it into your server `plugins/` folder.
 2. Restart the server — `config.yml` and language files are created automatically.
 3. Adjust settings in `config.yml` as needed.
 4. Apply changes without restarting: `/treechopper reload`
 
-**Requirements:** Paper, Spigot, or Folia · Java 21+ · Minecraft 1.21+
+**Requirements:** Paper, Spigot, or Folia · Java 21+ · Minecraft 1.21-26.1.2
 
 ---
 
@@ -353,12 +353,12 @@ auto-replant:
 
 ## Установка
 
-1. Скачай `TreeChopper-1.4.jar` и положи его в папку `plugins/` сервера.
+1. Скачай `TreeChopper-1.4.1.jar` и положи его в папку `plugins/` сервера.
 2. Перезапусти сервер — `config.yml` и языковые файлы создадутся автоматически.
 3. Настрой параметры в `config.yml` под свой сервер.
 4. Применяй изменения без рестарта: `/treechopper reload`
 
-**Требования:** Paper, Spigot или Folia · Java 21+ · Minecraft 1.21+
+**Требования:** Paper, Spigot или Folia · Java 21+ · Minecraft 1.21-26.1.2
 
 ---
 
