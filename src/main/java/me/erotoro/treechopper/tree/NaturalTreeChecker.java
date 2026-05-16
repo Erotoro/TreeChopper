@@ -33,14 +33,14 @@ public final class NaturalTreeChecker {
                                                    Material logType, Set<Material> associatedLeaves) {
         for (int[] column : trunkColumns) {
             Material belowType = world.getBlockAt(column[0], baseY - 1, column[1]).getType();
-            if (belowType.isAir()
+            if (TreeMaterials.isAir(belowType)
                     || belowType == logType
                     || TreeMaterials.isLog(belowType)
                     || associatedLeaves.contains(belowType)
                     || TreeMaterials.isTreeDecoration(belowType)
                     || isNaturalTerrain(belowType)
                     || isNaturalSupportMaterial(belowType)
-                    || !belowType.isSolid()) {
+                    || !isStructureSolid(belowType)) {
                 return false;
             }
         }
@@ -74,13 +74,65 @@ public final class NaturalTreeChecker {
     }
 
     private static boolean isStructureContactMaterial(Material material, Material logType, Set<Material> associatedLeaves) {
-        if (material.isAir() || isNaturalTerrain(material) || !material.isSolid()) {
+        if (TreeMaterials.isAir(material) || isNaturalTerrain(material) || !isStructureSolid(material)) {
             return false;
         }
         if (material == logType || TreeMaterials.isLog(material) || associatedLeaves.contains(material) || TreeMaterials.isTreeDecoration(material)) {
             return false;
         }
         if (material.name().endsWith("_LEAVES")) {
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean isStructureSolid(Material material) {
+        String name = material.name();
+        if (TreeMaterials.isAir(material)
+                || name.equals("WATER")
+                || name.equals("LAVA")
+                || name.endsWith("_WATER")
+                || name.endsWith("_LAVA")
+                || name.endsWith("_SAPLING")
+                || name.endsWith("_RAIL")
+                || name.endsWith("_CARPET")
+                || name.endsWith("_BUTTON")
+                || name.endsWith("_PRESSURE_PLATE")
+                || name.endsWith("_TORCH")
+                || name.endsWith("_SIGN")
+                || name.endsWith("_BANNER")
+                || name.endsWith("_FLOWER")
+                || name.endsWith("_FAN")
+                || name.endsWith("_CORAL")
+                || name.endsWith("_CANDLE")
+                || name.endsWith("_HEAD")
+                || name.endsWith("_SKULL")
+                || name.endsWith("_PANE")
+                || name.endsWith("_DOOR")
+                || name.endsWith("_TRAPDOOR")
+                || name.endsWith("_FENCE_GATE")
+                || name.endsWith("_SLAB")
+                || name.endsWith("_STAIRS")
+                || name.endsWith("_WALL")
+                || name.endsWith("_BED")
+                || name.endsWith("_POT")
+                || name.equals("VINE")
+                || name.equals("LADDER")
+                || name.equals("SCAFFOLDING")
+                || name.equals("SNOW")
+                || name.equals("SHORT_GRASS")
+                || name.equals("TALL_GRASS")
+                || name.equals("FERN")
+                || name.equals("LARGE_FERN")
+                || name.equals("DEAD_BUSH")
+                || name.equals("SEAGRASS")
+                || name.equals("TALL_SEAGRASS")
+                || name.equals("KELP")
+                || name.equals("KELP_PLANT")
+                || name.equals("SUGAR_CANE")
+                || name.equals("BAMBOO")
+                || name.equals("BAMBOO_SAPLING")
+                || name.equals("COCOA")) {
             return false;
         }
         return true;

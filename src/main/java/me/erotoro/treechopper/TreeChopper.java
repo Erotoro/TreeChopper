@@ -5,6 +5,7 @@ import me.erotoro.treechopper.model.BreakPlan;
 import me.erotoro.treechopper.model.TreeSearchResult;
 import me.erotoro.treechopper.coreprotect.CoreProtectService;
 import me.erotoro.treechopper.i18n.LocalizationService;
+import me.erotoro.treechopper.metrics.PluginMetricsBootstrap;
 import me.erotoro.treechopper.protection.ProtectionService;
 import me.erotoro.treechopper.replant.AutoReplantService;
 import me.erotoro.treechopper.replant.PlantingValidator;
@@ -78,6 +79,7 @@ public final class TreeChopper extends JavaPlugin implements Listener {
     private AutoReplantService autoReplantService;
     private ProtectionService protectionService;
     private CoreProtectService coreProtectService;
+    private PluginMetricsBootstrap pluginMetricsBootstrap;
     private File placedLogsFile;
     private File playerTogglesFile;
     private PlayerToggleService playerToggleService;
@@ -98,6 +100,8 @@ public final class TreeChopper extends JavaPlugin implements Listener {
         settings = TreeChopperSettings.load(getConfig());
         treeSearchService = new TreeSearchService(playerPlacedLogs, settings, NEIGHBOR_OFFSETS, CARDINAL_OFFSETS);
         coreProtectService = CoreProtectService.initialize(this, pluginManager, settings.coreProtect());
+        pluginMetricsBootstrap = new PluginMetricsBootstrap();
+        pluginMetricsBootstrap.initialize(this);
         foliageBreakService = new FoliageBreakService(
                 settings,
                 scheduler,

@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.Queue;
 import java.util.Set;
 
@@ -68,86 +70,156 @@ public final class TreeSearchService {
 
         int height = topY - baseY + 1;
         int maxHorizontalDist = isMega ? 8 : 6;
-        int minBranchY = baseY + (int) (height * 0.3);
-        int branchStartY = baseY + (int) (height * 0.4);
         double trunkCenterX = (isMega ? trunkColumns.stream().mapToDouble(column -> column[0]).average().orElse(trunkX) : trunkX) + 0.5;
         double trunkCenterZ = (isMega ? trunkColumns.stream().mapToDouble(column -> column[1]).average().orElse(trunkZ) : trunkZ) + 0.5;
 
         int requiredLeafContacts = isMega ? settings.minMegaLeafContacts() : settings.minLeafContacts();
-        Set<BlockKey> nearbyLeaves = new HashSet<>();
-        Queue<Block> queue = new ArrayDeque<>();
-        for (Block block : treeBlocks) {
-            if (block.getY() >= branchStartY) {
-                queue.add(block);
-            }
+        Set<Block> candidateLogs = collectCandidateLogs(treeBlocks, logType, baseY, trunkCenterX, trunkCenterZ, maxHorizontalDist, maxBreaks);
+        int candidateTopY = topY;
+        for (Block candidateLog : candidateLogs) {
+            candidateTopY = Math.max(candidateTopY, candidateLog.getY());
         }
-
-        for (Block block : treeBlocks) {
-            if (nearbyLeaves.size() >= requiredLeafContacts) {
-                break;
-            }
-            for (int[] offset : neighborOffsets) {
-                Block neighbor = block.getRelative(offset[0], offset[1], offset[2]);
-                if (neighbor.getChunk().isLoaded() && associatedLeaves.contains(neighbor.getType())) {
-                    nearbyLeaves.add(BlockKey.of(neighbor));
-                    if (nearbyLeaves.size() >= requiredLeafContacts) {
-                        break;
-                    }
-                }
-            }
-        }
+        Set<Block> leafBearingLogs = collectLeafBearingLogs(candidateLogs, associatedLeaves);
+        Set<BlockKey> nearbyLeaves = collectNearbyLeaves(leafBearingLogs, associatedLeaves);
 
         boolean hasLeafEvidence = nearbyLeaves.size() >= requiredLeafContacts;
         boolean deferNaturalValidationForAcacia = logType == Material.ACACIA_LOG && !hasLeafEvidence;
         if (!deferNaturalValidationForAcacia
-                && !NaturalTreeChecker.looksLikeNaturalTree(world, trunkColumns, baseY, topY, logType, associatedLeaves, settings, cardinalOffsets, hasLeafEvidence)) {
+                && !NaturalTreeChecker.looksLikeNaturalTree(world, trunkColumns, baseY, candidateTopY, logType, associatedLeaves, settings, cardinalOffsets, hasLeafEvidence)) {
             return new TreeSearchResult(treeBlocks, trunkBaseBlocks, false, false, isMega, logType);
         }
 
-        while (!queue.isEmpty() && treeBlocks.size() < maxBreaks && treeBlocks.size() < settings.maxLogs()) {
+        Set<Block> selectedLogs = selectLogsOnLeafBearingPaths(treeBlocks, candidateLogs, leafBearingLogs);
+        for (Block block : selectedLogs) {
+            if (playerPlacedLogs.contains(BlockKey.of(block))) {
+                return new TreeSearchResult(selectedLogs, trunkBaseBlocks, hasLeafEvidence, true, isMega, logType);
+            }
+        }
+        extendGroundedSupportColumns(selectedLogs, logType, maxBreaks);
+
+        boolean finalLeafEvidence = nearbyLeaves.size() >= requiredLeafContacts;
+        if (deferNaturalValidationForAcacia
+                && !NaturalTreeChecker.looksLikeNaturalTree(world, trunkColumns, baseY, candidateTopY, logType, associatedLeaves, settings, cardinalOffsets, finalLeafEvidence)) {
+            return new TreeSearchResult(selectedLogs, trunkBaseBlocks, false, false, isMega, logType);
+        }
+
+        return new TreeSearchResult(selectedLogs, trunkBaseBlocks, finalLeafEvidence, false, isMega, logType);
+    }
+
+    private Set<Block> collectCandidateLogs(Set<Block> trunkBlocks, Material logType, int baseY,
+                                            double trunkCenterX, double trunkCenterZ, int maxHorizontalDist, int maxBreaks) {
+        Set<Block> candidateLogs = new LinkedHashSet<>(trunkBlocks);
+        Queue<Block> queue = new ArrayDeque<>(trunkBlocks);
+        int minCandidateY = baseY - 4;
+
+        while (!queue.isEmpty() && candidateLogs.size() < maxBreaks && candidateLogs.size() < settings.maxLogs()) {
             Block current = queue.poll();
             for (int[] offset : neighborOffsets) {
-                int dx = offset[0];
-                int dy = offset[1];
-                int dz = offset[2];
-
-                Block neighbor = current.getRelative(dx, dy, dz);
-                if (!neighbor.getChunk().isLoaded()) {
+                Block neighbor = current.getRelative(offset[0], offset[1], offset[2]);
+                if (!neighbor.getChunk().isLoaded()
+                        || neighbor.getType() != logType
+                        || neighbor.getY() < minCandidateY
+                        || !isWithinHorizontalEnvelope(neighbor, trunkCenterX, trunkCenterZ, maxHorizontalDist + 2)
+                        || !candidateLogs.add(neighbor)) {
                     continue;
                 }
+                queue.add(neighbor);
+            }
+        }
 
-                if (neighbor.getType() == logType && !treeBlocks.contains(neighbor)) {
-                    if (neighbor.getY() < minBranchY) {
-                        continue;
-                    }
-                    if (dx != 0 && dz != 0 && dy < 0) {
-                        continue;
-                    }
+        return candidateLogs;
+    }
 
-                    double distX = Math.abs(neighbor.getX() + 0.5 - trunkCenterX);
-                    double distZ = Math.abs(neighbor.getZ() + 0.5 - trunkCenterZ);
-                    if (distX > maxHorizontalDist || distZ > maxHorizontalDist) {
-                        continue;
-                    }
-                    if (playerPlacedLogs.contains(BlockKey.of(neighbor))) {
-                        return new TreeSearchResult(treeBlocks, trunkBaseBlocks, nearbyLeaves.size() >= requiredLeafContacts, true, isMega, logType);
-                    }
+    private void extendGroundedSupportColumns(Set<Block> treeBlocks, Material logType, int maxBreaks) {
+        List<Block> discoveredBlocks = new ArrayList<>(treeBlocks);
+        for (Block block : discoveredBlocks) {
+            Block current = block;
+            while (treeBlocks.size() < maxBreaks && treeBlocks.size() < settings.maxLogs()) {
+                Block below = current.getRelative(0, -1, 0);
+                if (!below.getChunk().isLoaded() || below.getType() != logType || treeBlocks.contains(below)) {
+                    break;
+                }
+                treeBlocks.add(below);
+                current = below;
+            }
+        }
+    }
 
-                    treeBlocks.add(neighbor);
-                    queue.add(neighbor);
-                } else if (associatedLeaves.contains(neighbor.getType())) {
+    private Set<Block> collectLeafBearingLogs(Set<Block> candidateLogs, Set<Material> associatedLeaves) {
+        Set<Block> leafBearingLogs = new LinkedHashSet<>();
+        for (Block candidateLog : candidateLogs) {
+            for (int[] offset : neighborOffsets) {
+                Block neighbor = candidateLog.getRelative(offset[0], offset[1], offset[2]);
+                if (neighbor.getChunk().isLoaded() && associatedLeaves.contains(neighbor.getType())) {
+                    leafBearingLogs.add(candidateLog);
+                    break;
+                }
+            }
+        }
+        return leafBearingLogs;
+    }
+
+    private Set<BlockKey> collectNearbyLeaves(Set<Block> leafBearingLogs, Set<Material> associatedLeaves) {
+        Set<BlockKey> nearbyLeaves = new HashSet<>();
+        for (Block leafBearingLog : leafBearingLogs) {
+            for (int[] offset : neighborOffsets) {
+                Block neighbor = leafBearingLog.getRelative(offset[0], offset[1], offset[2]);
+                if (neighbor.getChunk().isLoaded() && associatedLeaves.contains(neighbor.getType())) {
                     nearbyLeaves.add(BlockKey.of(neighbor));
                 }
             }
         }
+        return nearbyLeaves;
+    }
 
-        boolean finalLeafEvidence = nearbyLeaves.size() >= requiredLeafContacts;
-        if (deferNaturalValidationForAcacia
-                && !NaturalTreeChecker.looksLikeNaturalTree(world, trunkColumns, baseY, topY, logType, associatedLeaves, settings, cardinalOffsets, finalLeafEvidence)) {
-            return new TreeSearchResult(treeBlocks, trunkBaseBlocks, false, false, isMega, logType);
+    private Set<Block> selectLogsOnLeafBearingPaths(Set<Block> trunkBlocks, Set<Block> candidateLogs, Set<Block> leafBearingLogs) {
+        Map<BlockKey, Block> blockByKey = new HashMap<>(candidateLogs.size() * 2);
+        Set<BlockKey> candidateKeys = new HashSet<>(candidateLogs.size() * 2);
+        for (Block candidateLog : candidateLogs) {
+            BlockKey key = BlockKey.of(candidateLog);
+            blockByKey.put(key, candidateLog);
+            candidateKeys.add(key);
         }
 
-        return new TreeSearchResult(treeBlocks, trunkBaseBlocks, finalLeafEvidence, false, isMega, logType);
+        Queue<Block> queue = new ArrayDeque<>(trunkBlocks);
+        Set<BlockKey> visited = new HashSet<>(trunkBlocks.size() * 2);
+        Map<BlockKey, BlockKey> parentByChild = new HashMap<>(candidateLogs.size() * 2);
+        for (Block trunkBlock : trunkBlocks) {
+            visited.add(BlockKey.of(trunkBlock));
+        }
+
+        while (!queue.isEmpty()) {
+            Block current = queue.poll();
+            BlockKey currentKey = BlockKey.of(current);
+            for (int[] offset : neighborOffsets) {
+                Block neighbor = current.getRelative(offset[0], offset[1], offset[2]);
+                BlockKey neighborKey = BlockKey.of(neighbor);
+                if (!candidateKeys.contains(neighborKey) || !visited.add(neighborKey)) {
+                    continue;
+                }
+                parentByChild.put(neighborKey, currentKey);
+                queue.add(blockByKey.get(neighborKey));
+            }
+        }
+
+        Set<Block> selectedLogs = new LinkedHashSet<>(trunkBlocks);
+        for (Block leafBearingLog : leafBearingLogs) {
+            BlockKey currentKey = BlockKey.of(leafBearingLog);
+            while (currentKey != null) {
+                Block currentBlock = blockByKey.get(currentKey);
+                if (currentBlock != null) {
+                    selectedLogs.add(currentBlock);
+                }
+                currentKey = parentByChild.get(currentKey);
+            }
+        }
+        return selectedLogs;
+    }
+
+    private boolean isWithinHorizontalEnvelope(Block block, double trunkCenterX, double trunkCenterZ, int maxHorizontalDist) {
+        double distX = Math.abs(block.getX() + 0.5 - trunkCenterX);
+        double distZ = Math.abs(block.getZ() + 0.5 - trunkCenterZ);
+        return distX <= maxHorizontalDist && distZ <= maxHorizontalDist;
     }
 
     private List<int[]> findTrunkColumns(World world, Material logType, int baseY, int trunkX, int trunkZ) {

@@ -18,13 +18,13 @@ public final class TreeMaterials {
     static {
         for (Material material : Material.values()) {
             String name = material.name();
-            if (!name.startsWith("STRIPPED_") && material.isBlock() && (name.endsWith("_LOG") || name.endsWith("_STEM"))) {
+            if (!name.startsWith("STRIPPED_") && (name.endsWith("_LOG") || name.endsWith("_STEM"))) {
                 LOG_MATERIALS.add(material);
             }
             if (name.equals("MUSHROOM_STEM")) {
                 LOG_MATERIALS.add(material);
             }
-            if (name.endsWith("_LEAVES") && material.isBlock()) {
+            if (name.endsWith("_LEAVES")) {
                 LEAF_MATERIALS.add(material);
             }
         }
@@ -37,6 +37,11 @@ public final class TreeMaterials {
         }
 
         addDecorationIfPresent("VINE");
+        addDecorationIfPresent("COCOA");
+        addDecorationIfPresent("PALE_HANGING_MOSS");
+        addDecorationIfPresent("MANGROVE_PROPAGULE");
+        addDecorationIfPresent("MANGROVE_ROOTS");
+        addDecorationIfPresent("MUDDY_MANGROVE_ROOTS");
 
         Set<Material> oakLeaves = new HashSet<>();
         oakLeaves.add(Material.OAK_LEAVES);
@@ -49,6 +54,7 @@ public final class TreeMaterials {
         LEAF_TYPE_CACHE.put(Material.DARK_OAK_LOG, Set.of(Material.DARK_OAK_LEAVES));
         LEAF_TYPE_CACHE.put(Material.ACACIA_LOG, Set.of(Material.ACACIA_LEAVES));
         putLeafMapping("CHERRY_LOG", "CHERRY_LEAVES");
+        putLeafMapping("PALE_OAK_LOG", "PALE_OAK_LEAVES");
         putLeafMapping("MANGROVE_LOG", "MANGROVE_LEAVES");
         putLeafMapping("CRIMSON_STEM", "NETHER_WART_BLOCK");
         putLeafMapping("WARPED_STEM", "WARPED_WART_BLOCK");
@@ -76,6 +82,36 @@ public final class TreeMaterials {
 
     public static boolean isTreeDecoration(Material material) {
         return TREE_DECORATION_MATERIALS.contains(material);
+    }
+
+    public static boolean isLeafMaterial(Material material) {
+        return LEAF_MATERIALS.contains(material);
+    }
+
+    public static boolean isMangroveLog(Material material) {
+        return material != null && material.name().equals("MANGROVE_LOG");
+    }
+
+    public static boolean isMangroveRootDecoration(Material material) {
+        if (material == null) {
+            return false;
+        }
+        String name = material.name();
+        return name.equals("MANGROVE_ROOTS") || name.equals("MUDDY_MANGROVE_ROOTS");
+    }
+
+    public static boolean isMangrovePropagule(Material material) {
+        return material != null && material.name().equals("MANGROVE_PROPAGULE");
+    }
+
+    public static boolean isAir(Material material) {
+        if (material == null) {
+            return true;
+        }
+        String name = material.name();
+        return name.equals("AIR")
+                || name.equals("CAVE_AIR")
+                || name.equals("VOID_AIR");
     }
 
     public static Set<Material> getAssociatedLeafTypes(Material logType) {

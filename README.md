@@ -9,7 +9,8 @@ A lightweight Paper/Spigot/Folia plugin that fells entire trees with a single ax
 [![Platform](https://img.shields.io/badge/platform-Paper%20%7C%20Spigot%20%7C%20Folia-brightgreen?style=flat-square)](https://papermc.io/)
 [![Minecraft](https://img.shields.io/badge/Minecraft-1.21%2B-red?style=flat-square)](https://modrinth.com/plugin/treechopper-ultra)
 [![Java](https://img.shields.io/badge/Java-21%2B-orange?style=flat-square)](https://adoptium.net/)
-[![Tests](https://img.shields.io/badge/tests-38%20passing-success?style=flat-square)](#)
+[![Tests](https://img.shields.io/badge/tests-49%20passing-success?style=flat-square)](#)
+[![bStats](https://img.shields.io/badge/bStats-live%20metrics-blue?style=flat-square)](https://bstats.org/plugin/bukkit/TreeChopper/27579)
 [![Ko-fi](https://img.shields.io/badge/Support%20me-Ko--fi-ff5f5f?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/erotoro)
 
 [Features](#features) · [How It Works](#how-it-works) · [Integrations](#integrations) · [Configuration](#configuration) · [Commands & Permissions](#commands--permissions) · [Installation](#installation)
@@ -88,8 +89,17 @@ Player breaks a log with an axe
 | **WorldGuard** | Blocks felling inside protected regions |
 | **GriefPrevention** | Blocks felling inside claimed land |
 | **CoreProtect** | Logs every broken block and replanted sapling under the player's name |
+| **bStats** | Anonymous usage metrics are embedded into the release jar for lightweight plugin statistics |
 
-All integrations are **soft dependencies** — the plugin works perfectly without any of them installed.
+All integrations are **soft dependencies** — the plugin works perfectly without any of them installed. `bStats` is bundled directly into the release jar and does not require any extra setup.
+
+---
+
+## bStats
+
+[![TreeChopper bStats](https://bstats.org/signatures/bukkit/TreeChopper.svg)](https://bstats.org/plugin/bukkit/TreeChopper/27579)
+
+Live usage statistics for TreeChopper are available on the public [bStats page](https://bstats.org/plugin/bukkit/TreeChopper/27579).
 
 ---
 
@@ -171,10 +181,15 @@ auto-replant:
 
 ## Installation
 
-1. Download `TreeChopper-1.4.1.jar` and drop it into your server `plugins/` folder.
+1. Download `TreeChopper-1.5.jar` and drop it into your server `plugins/` folder.
 2. Restart the server — `config.yml` and language files are created automatically.
 3. Adjust settings in `config.yml` as needed.
 4. Apply changes without restarting: `/treechopper reload`
+
+### Building from source
+
+- Build the release jar with embedded `bStats`: `./gradlew shadowJar`
+- Output artifact: `build/libs/TreeChopper-1.5.jar`
 
 **Requirements:** Paper, Spigot, or Folia · Java 21+ · Minecraft 1.21-26.1.2
 
@@ -353,7 +368,7 @@ auto-replant:
 
 ## Установка
 
-1. Скачай `TreeChopper-1.4.1.jar` и положи его в папку `plugins/` сервера.
+1. Скачай `TreeChopper-1.5.jar` и положи его в папку `plugins/` сервера.
 2. Перезапусти сервер — `config.yml` и языковые файлы создадутся автоматически.
 3. Настрой параметры в `config.yml` под свой сервер.
 4. Применяй изменения без рестарта: `/treechopper reload`

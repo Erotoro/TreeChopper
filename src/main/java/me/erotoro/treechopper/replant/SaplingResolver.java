@@ -26,6 +26,7 @@ public final class SaplingResolver {
         mapping.put(Material.ACACIA_LOG, Material.ACACIA_SAPLING);
         mapping.put(Material.DARK_OAK_LOG, Material.DARK_OAK_SAPLING);
         addIfPresent(mapping, "CHERRY_LOG", "CHERRY_SAPLING");
+        addIfPresent(mapping, "PALE_OAK_LOG", "PALE_OAK_SAPLING");
         addIfPresent(mapping, "MANGROVE_LOG", "MANGROVE_PROPAGULE");
         addIfPresent(mapping, "CRIMSON_STEM", "CRIMSON_FUNGUS");
         addIfPresent(mapping, "WARPED_STEM", "WARPED_FUNGUS");

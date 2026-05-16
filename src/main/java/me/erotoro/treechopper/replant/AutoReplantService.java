@@ -165,6 +165,15 @@ public final class AutoReplantService {
             }
         }
 
+        for (Block target : targets) {
+            if (!protectionService.canPlace(player, target, saplingType)) {
+                return ReplantResult.skipped(
+                        ReplantResultType.PROTECTION_DENIED,
+                        "Protection hook denied placement at " + formatBlock(target)
+                );
+            }
+        }
+
         SaplingInventoryService.InventoryPolicyResult inventoryResult = saplingInventoryService.verifyAndConsume(
                 player.getInventory(),
                 saplingType,
@@ -178,12 +187,6 @@ public final class AutoReplantService {
 
         int planted = 0;
         for (Block target : targets) {
-            if (!protectionService.canPlace(player, target, saplingType)) {
-                return ReplantResult.skipped(
-                        ReplantResultType.PROTECTION_DENIED,
-                        "Protection hook denied placement at " + formatBlock(target)
-                );
-            }
             target.setType(saplingType, false);
             if (target.getType() != saplingType) {
                 continue;

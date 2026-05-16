@@ -1,5 +1,6 @@
 package me.erotoro.treechopper.coreprotect;
 
+import me.erotoro.treechopper.tree.TreeMaterials;
 import net.coreprotect.CoreProtectAPI;
 import org.bukkit.block.BlockState;
 import org.bukkit.plugin.PluginManager;
@@ -47,11 +48,13 @@ public final class CoreProtectService {
     }
 
     public void logRemoval(String actorName, BlockState originalState) {
-        if (actorName == null || actorName.isBlank() || originalState == null || originalState.getType().isAir()) {
+        if (actorName == null || actorName.isBlank() || originalState == null || TreeMaterials.isAir(originalState.getType())) {
             return;
         }
         try {
             api.ifPresent(coreProtectAPI -> coreProtectAPI.logRemoval(actorName, originalState));
+        } catch (NoClassDefFoundError error) {
+            debug("CoreProtect classes are unavailable at runtime; removal logging skipped.");
         } catch (RuntimeException exception) {
             debug("Failed to log removal at "
                     + originalState.getX() + "," + originalState.getY() + "," + originalState.getZ()
@@ -60,11 +63,13 @@ public final class CoreProtectService {
     }
 
     public void logPlacement(String actorName, BlockState placedState) {
-        if (actorName == null || actorName.isBlank() || placedState == null || placedState.getType().isAir()) {
+        if (actorName == null || actorName.isBlank() || placedState == null || TreeMaterials.isAir(placedState.getType())) {
             return;
         }
         try {
             api.ifPresent(coreProtectAPI -> coreProtectAPI.logPlacement(actorName, placedState));
+        } catch (NoClassDefFoundError error) {
+            debug("CoreProtect classes are unavailable at runtime; placement logging skipped.");
         } catch (RuntimeException exception) {
             debug("Failed to log placement at "
                     + placedState.getX() + "," + placedState.getY() + "," + placedState.getZ()

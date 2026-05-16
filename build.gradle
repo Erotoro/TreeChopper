@@ -1,7 +1,10 @@
-apply plugin: 'java'
+plugins {
+    id 'java'
+    id 'com.gradleup.shadow' version '9.3.1'
+}
 
 group = 'me.erotoro'
-version = '1.4.1'
+version = '1.5'
 def spigotApiVersion = '1.21.1-R0.1-SNAPSHOT'
 
 java {
@@ -45,6 +48,7 @@ repositories {
 }
 
 dependencies {
+    implementation 'org.bstats:bstats-bukkit:3.2.1'
     compileOnly "org.spigotmc:spigot-api:${spigotApiVersion}"
     compileOnly "com.sk89q.worldguard:worldguard-bukkit:7.0.16"
     compileOnly "com.github.GriefPrevention:GriefPrevention:16.18.7"
@@ -66,6 +70,25 @@ tasks.withType(JavaCompile).configureEach {
 
 tasks.test {
     useJUnitPlatform()
+}
+
+tasks.jar {
+    archiveClassifier = 'thin'
+}
+
+tasks.shadowJar {
+    archiveClassifier = ''
+    configurations = [project.configurations.runtimeClasspath]
+
+    dependencies {
+        exclude { dependency -> dependency.moduleGroup != 'org.bstats' }
+    }
+
+    relocate('org.bstats', "${project.group}.treechopper.libs.bstats")
+}
+
+tasks.assemble {
+    dependsOn tasks.shadowJar
 }
 
 processResources {
