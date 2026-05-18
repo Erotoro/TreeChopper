@@ -97,9 +97,9 @@ All integrations are **soft dependencies** — the plugin works perfectly withou
 
 ## bStats
 
-[![TreeChopper bStats](https://bstats.org/signatures/bukkit/TreeChopper.svg)](https://bstats.org/plugin/bukkit/TreeChopper/27579)
+[![TreeChopper bStats](https://bstats.org/signatures/bukkit/TreeChopperUltra.svg)](https://bstats.org/plugin/bukkit/TreeChopperUltra/31348)
 
-Live usage statistics for TreeChopper are available on the public [bStats page](https://bstats.org/plugin/bukkit/TreeChopper/27579).
+Live usage statistics for TreeChopper are available on the public [bStats page](https://bstats.org/plugin/bukkit/TreeChopperUltra/31348).
 
 ---
 
