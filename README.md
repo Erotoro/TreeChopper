@@ -10,7 +10,7 @@ A lightweight Paper/Spigot/Folia plugin that fells entire trees with a single ax
 [![Minecraft](https://img.shields.io/badge/Minecraft-1.21%2B-red?style=flat-square)](https://modrinth.com/plugin/treechopper-ultra)
 [![Java](https://img.shields.io/badge/Java-21%2B-orange?style=flat-square)](https://adoptium.net/)
 [![Tests](https://img.shields.io/badge/tests-49%20passing-success?style=flat-square)](#)
-[![bStats](https://img.shields.io/badge/bStats-live%20metrics-blue?style=flat-square)](https://bstats.org/plugin/bukkit/TreeChopper/27579)
+[![bStats](https://img.shields.io/badge/bStats-live%20metrics-blue?style=flat-square)](https://bstats.org/plugin/bukkit/TreeChopperUltra/31348)
 [![Ko-fi](https://img.shields.io/badge/Support%20me-Ko--fi-ff5f5f?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/erotoro)
 
 [Features](#features) · [How It Works](#how-it-works) · [Integrations](#integrations) · [Configuration](#configuration) · [Commands & Permissions](#commands--permissions) · [Installation](#installation)
