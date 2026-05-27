@@ -7,8 +7,13 @@ import java.io.File;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -96,6 +101,81 @@ class PlayerToggleServiceTest {
         assertTrue(service.isEnabled(enabledPlayer));
         assertFalse(service.isEnabled(disabledPlayer));
         assertFalse(service.isEnabled(UUID.randomUUID()));
+    }
+
+    @Test
+    void survivesConcurrentTogglesFromMultipleThreads() throws InterruptedException {
+        PlayerToggleService service = new PlayerToggleService(
+                new PlayerTogglePersistence(new File("unused.yml")),
+                new PlayerToggleSettings(true, true, false),
+                Logger.getLogger("test")
+        );
+
+        int playerCount = 64;
+        int togglesPerPlayer = 100;
+        UUID[] players = new UUID[playerCount];
+        for (int i = 0; i < playerCount; i++) {
+            players[i] = UUID.randomUUID();
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(8);
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(playerCount);
+
+        for (UUID playerId : players) {
+            executor.submit(() -> {
+                try {
+                    start.await();
+                    for (int i = 0; i < togglesPerPlayer; i++) {
+                        service.toggle(playerId);
+                        service.isEnabled(playerId);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    done.countDown();
+                }
+            });
+        }
+
+        start.countDown();
+        assertTrue(done.await(15, TimeUnit.SECONDS), "Concurrent toggles should complete within timeout");
+        executor.shutdown();
+        assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+
+        // Even number of toggles per player → final state matches default-enabled (true).
+        assertEquals(playerCount, service.size());
+        for (UUID playerId : players) {
+            assertTrue(service.isEnabled(playerId),
+                    "After even toggles each player should be back to the default state");
+        }
+    }
+
+    @Test
+    void loadAtomicallySwapsStateWithoutVisibleEmptyWindow() {
+        PlayerToggleService service = new PlayerToggleService(
+                new PlayerTogglePersistence(new File("unused.yml")),
+                new PlayerToggleSettings(true, false, false),
+                Logger.getLogger("test")
+        );
+
+        UUID existingPlayer = UUID.randomUUID();
+        service.setEnabled(existingPlayer, true);
+        assertTrue(service.isEnabled(existingPlayer));
+
+        InMemoryPlayerTogglePersistence replacement = new InMemoryPlayerTogglePersistence();
+        UUID loadedPlayer = UUID.randomUUID();
+        replacement.stored = Map.of(loadedPlayer, true);
+
+        PlayerToggleService swapped = new PlayerToggleService(
+                replacement,
+                new PlayerToggleSettings(true, false, false),
+                Logger.getLogger("test")
+        );
+        swapped.load();
+        assertTrue(swapped.isEnabled(loadedPlayer));
+        // Previously enabled players (default disabled here) should now read the default.
+        assertFalse(swapped.isEnabled(existingPlayer));
     }
 
     private static final class InMemoryPlayerTogglePersistence extends PlayerTogglePersistence {

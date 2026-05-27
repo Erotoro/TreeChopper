@@ -35,13 +35,7 @@ class FoliageBreakServiceTest {
         world.setType(0, 64, 0, Material.JUNGLE_LOG);
         world.setType(1, 64, 0, Material.COCOA);
 
-        TaskSchedulerFacade scheduler = mock(TaskSchedulerFacade.class);
-        doAnswer(invocation -> {
-            @SuppressWarnings("unchecked")
-            java.util.function.Consumer<List<Block>> action = invocation.getArgument(3);
-            action.accept(invocation.getArgument(0));
-            return null;
-        }).when(scheduler).scheduleBlockBatches(anyCollection(), anyLong(), anyInt(), any());
+        TaskSchedulerFacade scheduler = createInlineScheduler();
 
         Player player = mock(Player.class);
         when(player.getName()).thenReturn("tester");
@@ -191,6 +185,34 @@ class FoliageBreakServiceTest {
         assertEquals(Material.VINE, world.getType(4, 64, 0));
     }
 
+    @Test
+    void breaksLeavesOverflowingIntoChunksWithoutLogs() {
+        // Log sits at the corner of chunk (0,0); the canopy spills into chunks
+        // (1,0), (0,1), (1,1) where there are no logs. Regression for the bug where
+        // per-chunk dispatch skipped chunks with no logs and left mega-tree canopy
+        // hanging in the air.
+        TestBlockWorld world = new TestBlockWorld();
+        world.setType(15, 64, 15, Material.JUNGLE_LOG);
+        world.setType(16, 64, 16, Material.JUNGLE_LEAVES); // chunk (1, 1) — no logs here
+        world.setType(17, 64, 17, Material.JUNGLE_LEAVES); // reached via BFS within chunk (1, 1)
+        world.setType(16, 64, 14, Material.JUNGLE_LEAVES); // chunk (1, 0)
+        world.setType(14, 64, 16, Material.JUNGLE_LEAVES); // chunk (0, 1)
+
+        FoliageBreakService service = createService();
+
+        service.breakFoliage(
+                createPlayer(),
+                Set.of(new Location(world.world(), 15, 64, 15)),
+                Set.of(world.blockAt(15, 64, 15)),
+                Material.JUNGLE_LOG
+        );
+
+        assertEquals(Material.AIR, world.getType(16, 64, 16));
+        assertEquals(Material.AIR, world.getType(17, 64, 17));
+        assertEquals(Material.AIR, world.getType(16, 64, 14));
+        assertEquals(Material.AIR, world.getType(14, 64, 16));
+    }
+
     private static int[][] createNeighborOffsets() {
         int[][] offsets = new int[26][3];
         int index = 0;
@@ -219,13 +241,7 @@ class FoliageBreakServiceTest {
     }
 
     private static FoliageBreakService createService() {
-        TaskSchedulerFacade scheduler = mock(TaskSchedulerFacade.class);
-        doAnswer(invocation -> {
-            @SuppressWarnings("unchecked")
-            java.util.function.Consumer<List<Block>> action = invocation.getArgument(3);
-            action.accept(invocation.getArgument(0));
-            return null;
-        }).when(scheduler).scheduleBlockBatches(anyCollection(), anyLong(), anyInt(), any());
+        TaskSchedulerFacade scheduler = createInlineScheduler();
 
         BlockBreakEvent event = mock(BlockBreakEvent.class);
         when(event.isCancelled()).thenReturn(false);
@@ -238,6 +254,22 @@ class FoliageBreakServiceTest {
                 (testPlayer, block) -> event,
                 createCoreProtectService()
         );
+    }
+
+    private static TaskSchedulerFacade createInlineScheduler() {
+        TaskSchedulerFacade scheduler = mock(TaskSchedulerFacade.class);
+        doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            java.util.function.Consumer<List<Block>> action = invocation.getArgument(3);
+            action.accept(invocation.getArgument(0));
+            return null;
+        }).when(scheduler).scheduleBlockBatches(anyCollection(), anyLong(), anyInt(), any());
+        doAnswer(invocation -> {
+            Runnable runnable = invocation.getArgument(2);
+            runnable.run();
+            return null;
+        }).when(scheduler).scheduleDelayed(any(Location.class), anyLong(), any(Runnable.class));
+        return scheduler;
     }
 
     private static Player createPlayer() {

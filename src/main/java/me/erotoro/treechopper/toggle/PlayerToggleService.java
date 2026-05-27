@@ -5,15 +5,19 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 public final class PlayerToggleService {
 
     private final PlayerTogglePersistence persistence;
     private final Logger logger;
-    private final Map<UUID, Boolean> playerStates = new HashMap<>();
-    private PlayerToggleSettings settings;
-    private boolean dirty;
+
+    // Reference is reassigned on load() to atomically swap the entire state.
+    // Region threads (Folia) read isEnabled(); main thread writes during reload.
+    private volatile Map<UUID, Boolean> playerStates = new ConcurrentHashMap<>();
+    private volatile PlayerToggleSettings settings;
+    private volatile boolean dirty;
 
     public PlayerToggleService(PlayerTogglePersistence persistence, PlayerToggleSettings settings, Logger logger) {
         this.persistence = Objects.requireNonNull(persistence, "persistence");
@@ -27,45 +31,57 @@ public final class PlayerToggleService {
 
     public boolean isEnabled(UUID playerId) {
         Objects.requireNonNull(playerId, "playerId");
-        if (!settings.enabled()) {
+        PlayerToggleSettings currentSettings = settings;
+        if (!currentSettings.enabled()) {
             return true;
         }
-        return playerStates.getOrDefault(playerId, settings.defaultEnabled());
+        return playerStates.getOrDefault(playerId, currentSettings.defaultEnabled());
     }
 
     public boolean toggle(UUID playerId) {
         Objects.requireNonNull(playerId, "playerId");
-        if (!settings.enabled()) {
+        PlayerToggleSettings currentSettings = settings;
+        if (!currentSettings.enabled()) {
             return true;
         }
-        boolean newState = !isEnabled(playerId);
-        setEnabled(playerId, newState);
-        return newState;
+        boolean defaultEnabled = currentSettings.defaultEnabled();
+        Boolean newState = playerStates.compute(playerId, (id, existing) -> {
+            boolean previous = existing != null ? existing : defaultEnabled;
+            return !previous;
+        });
+        dirty = true;
+        if (currentSettings.saveOnChange()) {
+            save();
+        }
+        return newState != null && newState;
     }
 
     public void setEnabled(UUID playerId, boolean enabled) {
         Objects.requireNonNull(playerId, "playerId");
-        if (!settings.enabled()) {
+        PlayerToggleSettings currentSettings = settings;
+        if (!currentSettings.enabled()) {
             return;
         }
         Boolean previous = playerStates.put(playerId, enabled);
         if (!Objects.equals(previous, enabled)) {
             dirty = true;
-            if (settings.saveOnChange()) {
+            if (currentSettings.saveOnChange()) {
                 save();
             }
         }
     }
 
     public void load() {
-        playerStates.clear();
-        playerStates.putAll(persistence.load());
+        Map<UUID, Boolean> loaded = persistence.load();
+        // Atomic swap: readers see either old or new map, never a torn intermediate state.
+        playerStates = new ConcurrentHashMap<>(loaded);
         dirty = false;
     }
 
     public void save() {
         try {
-            persistence.save(playerStates);
+            // Snapshot prevents the persistence layer from observing concurrent modifications.
+            persistence.save(new HashMap<>(playerStates));
             dirty = false;
         } catch (IOException exception) {
             logger.warning("Failed to save player toggles: " + exception.getMessage());

@@ -72,18 +72,20 @@ public final class TreeChopper extends JavaPlugin implements Listener {
     private final Set<BlockKey> internalBreaks = ConcurrentHashMap.newKeySet();
     private final Set<UUID> activeFallingBlocks = ConcurrentHashMap.newKeySet();
 
-    private PluginManager pluginManager;
-    private TaskSchedulerFacade scheduler;
-    private TreeSearchService treeSearchService;
-    private FoliageBreakService foliageBreakService;
-    private AutoReplantService autoReplantService;
-    private ProtectionService protectionService;
-    private CoreProtectService coreProtectService;
-    private PluginMetricsBootstrap pluginMetricsBootstrap;
-    private File placedLogsFile;
-    private File playerTogglesFile;
-    private PlayerToggleService playerToggleService;
-    private LocalizationService localizationService;
+    // Reload reassigns several of these from the main thread while Folia region threads
+    // are reading them inside event handlers. `volatile` provides the publication guarantee.
+    private volatile PluginManager pluginManager;
+    private volatile TaskSchedulerFacade scheduler;
+    private volatile TreeSearchService treeSearchService;
+    private volatile FoliageBreakService foliageBreakService;
+    private volatile AutoReplantService autoReplantService;
+    private volatile ProtectionService protectionService;
+    private volatile CoreProtectService coreProtectService;
+    private volatile PluginMetricsBootstrap pluginMetricsBootstrap;
+    private volatile File placedLogsFile;
+    private volatile File playerTogglesFile;
+    private volatile PlayerToggleService playerToggleService;
+    private volatile LocalizationService localizationService;
     private final AtomicBoolean placedLogsDirty = new AtomicBoolean();
     private volatile TreeChopperSettings settings = TreeChopperSettings.DEFAULT;
 
@@ -321,21 +323,30 @@ public final class TreeChopper extends JavaPlugin implements Listener {
             return;
         }
 
+        boolean unbreakable = meta.isUnbreakable();
         int currentDamage = damageable.getDamage();
         int maxDurability = tool.getType().getMaxDurability();
-        if (currentDamage >= maxDurability) {
+        if (!unbreakable && currentDamage >= maxDurability) {
             return;
         }
 
+        // The originally hit block was placed by the player — let vanilla break it
+        // normally without triggering a tree-fell chain.
         if (playerPlacedLogs.remove(targetKey)) {
             markPlacedLogsDirty();
             return;
         }
 
         int unbreakingLevel = tool.getEnchantmentLevel(Enchantment.UNBREAKING);
-        int effectiveMaxBreaks = unbreakingLevel > 0
-                ? (maxDurability - currentDamage) * (unbreakingLevel + 1)
-                : (maxDurability - currentDamage);
+        int effectiveMaxBreaks;
+        if (unbreakable) {
+            effectiveMaxBreaks = settings.maxLogs();
+        } else {
+            int remainingDurability = maxDurability - currentDamage;
+            effectiveMaxBreaks = unbreakingLevel > 0
+                    ? remainingDurability * (unbreakingLevel + 1)
+                    : remainingDurability;
+        }
 
         TreeSearchResult result = treeSearchService.findTree(block, Math.min(effectiveMaxBreaks, settings.maxLogs()));
         if (!result.foundLeaves || result.foundPlayerPlaced) {
@@ -343,7 +354,7 @@ public final class TreeChopper extends JavaPlugin implements Listener {
         }
         boolean naturalTree = result.foundLeaves && !result.foundPlayerPlaced;
 
-        BreakPlan breakPlan = planBrokenLogs(block, result.treeBlocks, currentDamage, maxDurability, unbreakingLevel);
+        BreakPlan breakPlan = planTreeBreak(block, result.treeBlocks, currentDamage, maxDurability, unbreakingLevel, unbreakable);
         if (breakPlan.blocks.isEmpty()) {
             return;
         }
@@ -351,19 +362,22 @@ public final class TreeChopper extends JavaPlugin implements Listener {
             return;
         }
 
-        event.setCancelled(true);
-
-        int newDamage = Math.min(maxDurability, currentDamage + breakPlan.durabilityDamage);
-        damageable.setDamage(newDamage);
-        tool.setItemMeta(meta);
-        if (newDamage >= maxDurability) {
-            player.getInventory().setItemInMainHand(null);
+        // Intentionally do NOT cancel: vanilla performs the first-block break with the
+        // correct durability roll (honouring Unbreakable + Unbreaking), drops via
+        // Fortune/Silk Touch, and fires BlockBreakEvent/BlockDropItemEvent so other
+        // plugins see a normal break. We only add the additional cost for the chain.
+        if (breakPlan.durabilityDamage > 0 && !unbreakable) {
+            int newDamage = Math.min(maxDurability, currentDamage + breakPlan.durabilityDamage);
+            damageable.setDamage(newDamage);
+            tool.setItemMeta(meta);
         }
 
         Set<BlockKey> brokenLogs = ConcurrentHashMap.newKeySet();
         Set<Location> brokenLogLocations = ConcurrentHashMap.newKeySet();
-
-        breakDirectBlock(block, tool, event.isDropItems(), brokenLogs, brokenLogLocations);
+        // Vanilla will break the first block immediately after this handler returns; record
+        // it now so foliage cleanup and the replant anchor are computed correctly.
+        brokenLogs.add(targetKey);
+        brokenLogLocations.add(block.getLocation());
 
         List<Block> animatedBlocks = new ArrayList<>();
         for (Block planned : breakPlan.blocks) {
@@ -379,7 +393,8 @@ public final class TreeChopper extends JavaPlugin implements Listener {
         }
     }
 
-    private BreakPlan planBrokenLogs(Block hitBlock, Set<Block> treeBlocks, int currentDamage, int maxDurability, int unbreakingLevel) {
+    private BreakPlan planTreeBreak(Block hitBlock, Set<Block> treeBlocks, int currentDamage, int maxDurability,
+                                    int unbreakingLevel, boolean unbreakable) {
         List<Block> ordered = new ArrayList<>();
         ordered.add(hitBlock);
 
@@ -388,35 +403,29 @@ public final class TreeChopper extends JavaPlugin implements Listener {
         remaining.sort(Comparator.comparingInt(Block::getY).reversed());
         ordered.addAll(remaining);
 
-        List<Block> result = new ArrayList<>();
-        int pendingDamage = 0;
+        List<Block> selected = new ArrayList<>();
+        int animatedDamage = 0;
         ThreadLocalRandom random = ThreadLocalRandom.current();
+        // Reserve one durability point for vanilla's first-block roll (worst case;
+        // Unbreaking may probabilistically skip it but we plan conservatively).
+        int vanillaReservedCost = unbreakable ? 0 : 1;
+
+        boolean isFirstBlock = true;
         for (Block candidate : ordered) {
-            if (currentDamage + pendingDamage >= maxDurability) {
+            if (isFirstBlock) {
+                selected.add(candidate);
+                isFirstBlock = false;
+                continue;
+            }
+            if (!unbreakable && currentDamage + vanillaReservedCost + animatedDamage >= maxDurability) {
                 break;
             }
-            result.add(candidate);
-            if (unbreakingLevel == 0 || random.nextDouble() < (1.0 / (unbreakingLevel + 1))) {
-                pendingDamage++;
+            selected.add(candidate);
+            if (!unbreakable && (unbreakingLevel == 0 || random.nextDouble() < (1.0 / (unbreakingLevel + 1)))) {
+                animatedDamage++;
             }
         }
-        return new BreakPlan(result, pendingDamage);
-    }
-
-    private void breakDirectBlock(Block block, ItemStack tool, boolean dropItems, Set<BlockKey> brokenLogs, Set<Location> brokenLogLocations) {
-        if (!block.getChunk().isLoaded() || !isLog(block)) {
-            return;
-        }
-        if (dropItems) {
-            block.breakNaturally(tool);
-        } else {
-            block.setType(Material.AIR, false);
-        }
-        brokenLogs.add(BlockKey.of(block));
-        brokenLogLocations.add(block.getLocation());
-        if (playerPlacedLogs.remove(BlockKey.of(block))) {
-            markPlacedLogsDirty();
-        }
+        return new BreakPlan(selected, animatedDamage);
     }
 
     private void animateTreeFall(Player player, Location treeAnchor, List<Block> blocks, ItemStack tool, Set<BlockKey> brokenLogs,

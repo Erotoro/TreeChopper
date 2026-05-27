@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'me.erotoro'
-version = '1.5'
+version = '1.6'
 def spigotApiVersion = '1.21.1-R0.1-SNAPSHOT'
 
 java {

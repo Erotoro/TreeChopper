@@ -2,6 +2,7 @@ package me.erotoro.treechopper.tree;
 
 import me.erotoro.treechopper.TreeChopperSettings;
 import me.erotoro.treechopper.coreprotect.CoreProtectService;
+import me.erotoro.treechopper.model.ChunkKey;
 import me.erotoro.treechopper.scheduler.TaskSchedulerFacade;
 import me.erotoro.treechopper.util.CoordinatePacker;
 import org.bukkit.Location;
@@ -15,14 +16,27 @@ import org.bukkit.event.block.BlockBreakEvent;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashSet;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.UUID;
 import java.util.function.BiFunction;
 
+/**
+ * Breaks foliage (leaves and decorations such as vines, mangrove roots, propagules)
+ * that belongs to the tree we just felled.
+ *
+ * <p>The work is dispatched per-chunk: each chunk's processing runs on its own region
+ * thread via {@link TaskSchedulerFacade#scheduleDelayed}. This is required for Folia
+ * where accessing a block outside the current region's owned chunks throws an
+ * {@code IllegalStateException}. The per-chunk model accepts a minor coverage trade-off
+ * (leaves dangling into chunks without logs may be missed) in exchange for thread safety.
+ */
 public final class FoliageBreakService {
 
     private final TreeChopperSettings settings;
@@ -45,7 +59,6 @@ public final class FoliageBreakService {
         if (logPositions.isEmpty()) {
             return;
         }
-
         Location sample = logPositions.iterator().next();
         World world = sample.getWorld();
         if (world == null) {
@@ -53,15 +66,94 @@ public final class FoliageBreakService {
         }
 
         Set<Material> validLeaves = TreeMaterials.getAssociatedLeafTypes(logType);
+
+        // Coordinate snapshots — Block/Location references mustn't be dereferenced across
+        // regions on Folia, but raw ints are safe to pass to any scheduled task.
+        Set<Long> allTreeBlockCoords = packBlockCoords(treeBlocks);
+        List<int[]> allLogCoords = new ArrayList<>(logPositions.size());
+        int minLogX = Integer.MAX_VALUE;
+        int maxLogX = Integer.MIN_VALUE;
+        int minLogZ = Integer.MAX_VALUE;
+        int maxLogZ = Integer.MIN_VALUE;
+        for (Location loc : logPositions) {
+            int x = loc.getBlockX();
+            int y = loc.getBlockY();
+            int z = loc.getBlockZ();
+            allLogCoords.add(new int[]{x, y, z});
+            if (x < minLogX) minLogX = x;
+            if (x > maxLogX) maxLogX = x;
+            if (z < minLogZ) minLogZ = z;
+            if (z > maxLogZ) maxLogZ = z;
+        }
+
+        // Dispatch a per-chunk task for every chunk that could contain foliage attached
+        // to this tree — i.e. chunks within `leafSearchRadius` of any log. This covers
+        // mega-tree canopies that overflow into chunks containing no logs themselves.
+        int reach = settings.leafSearchRadius();
+        int chunkMinX = (minLogX - reach) >> 4;
+        int chunkMaxX = (maxLogX + reach) >> 4;
+        int chunkMinZ = (minLogZ - reach) >> 4;
+        int chunkMaxZ = (maxLogZ + reach) >> 4;
+
+        for (int cx = chunkMinX; cx <= chunkMaxX; cx++) {
+            for (int cz = chunkMinZ; cz <= chunkMaxZ; cz++) {
+                int chunkX = cx;
+                int chunkZ = cz;
+                // Schedule at the centre of the target chunk so Folia's RegionScheduler
+                // routes the task to that chunk's owning region.
+                Location anchor = new Location(world, (chunkX << 4) + 8, sample.getBlockY(), (chunkZ << 4) + 8);
+                scheduler.scheduleDelayed(anchor, 0L, () ->
+                        processChunkFoliage(player, world, chunkX, chunkZ, allLogCoords,
+                                validLeaves, allTreeBlockCoords, logType)
+                );
+            }
+        }
+    }
+
+    private void processChunkFoliage(Player player, World world, int chunkX, int chunkZ,
+                                     List<int[]> allLogCoords, Set<Material> validLeaves,
+                                     Set<Long> allTreeBlockCoords, Material logType) {
+        Set<Block> leavesToBreak = bfsLeavesInChunk(world, allLogCoords, validLeaves, chunkX, chunkZ);
+        filterLeavesOwnedByForeignLogsInChunk(world, leavesToBreak, allTreeBlockCoords,
+                logType, chunkX, chunkZ);
+
+        Set<Block> decorations = collectDecorationsInChunk(world, allLogCoords, leavesToBreak,
+                chunkX, chunkZ);
+        decorations = filterDecorationsOwnedByCurrentTreeInChunk(world, decorations, leavesToBreak,
+                allTreeBlockCoords, logType, chunkX, chunkZ);
+
+        Set<Block> foliage = new HashSet<>(leavesToBreak.size() + decorations.size());
+        foliage.addAll(leavesToBreak);
+        foliage.addAll(decorations);
+        if (foliage.isEmpty()) {
+            return;
+        }
+
+        scheduleFoliageBreaks(player, foliage, validLeaves);
+    }
+
+    private Set<Block> bfsLeavesInChunk(World world, List<int[]> allLogCoords, Set<Material> validLeaves,
+                                        int chunkX, int chunkZ) {
         Set<Block> leavesToBreak = new HashSet<>();
         Set<Block> visited = new HashSet<>();
         Queue<Block> queue = new ArrayDeque<>();
 
-        for (Location logLocation : logPositions) {
-            Block logBlock = world.getBlockAt(logLocation);
+        // Seed: leaves IN OUR CHUNK that are adjacent to ANY log (even logs in other chunks).
+        // We only dereference world.getBlockAt for coordinates inside our chunk, so this stays
+        // Folia-safe while still catching canopy that hangs over into log-free chunks.
+        for (int[] log : allLogCoords) {
+            int lx = log[0];
+            int ly = log[1];
+            int lz = log[2];
             for (int[] offset : neighborOffsets) {
-                Block neighbor = logBlock.getRelative(offset[0], offset[1], offset[2]);
-                if (neighbor.getChunk().isLoaded() && validLeaves.contains(neighbor.getType()) && visited.add(neighbor)) {
+                int nx = lx + offset[0];
+                int ny = ly + offset[1];
+                int nz = lz + offset[2];
+                if ((nx >> 4) != chunkX || (nz >> 4) != chunkZ) {
+                    continue;
+                }
+                Block neighbor = world.getBlockAt(nx, ny, nz);
+                if (validLeaves.contains(neighbor.getType()) && visited.add(neighbor)) {
                     queue.add(neighbor);
                     leavesToBreak.add(neighbor);
                 }
@@ -75,7 +167,10 @@ public final class FoliageBreakService {
                 Block current = queue.poll();
                 for (int[] offset : neighborOffsets) {
                     Block neighbor = current.getRelative(offset[0], offset[1], offset[2]);
-                    if (neighbor.getChunk().isLoaded() && validLeaves.contains(neighbor.getType()) && visited.add(neighbor)) {
+                    if (!isInChunk(neighbor, chunkX, chunkZ)) {
+                        continue;
+                    }
+                    if (validLeaves.contains(neighbor.getType()) && visited.add(neighbor)) {
                         queue.add(neighbor);
                         leavesToBreak.add(neighbor);
                     }
@@ -84,19 +179,12 @@ public final class FoliageBreakService {
             depth++;
         }
 
-        filterLeavesOwnedByOtherTrees(world, leavesToBreak, treeBlocks, logType);
-        Set<Block> decorationsToBreak = collectDecorationsToBreak(logPositions, leavesToBreak);
-        decorationsToBreak = filterDecorationsOwnedByCurrentTree(world, decorationsToBreak, leavesToBreak, treeBlocks, logType);
-        Set<Block> foliageToBreak = new HashSet<>(leavesToBreak.size() + decorationsToBreak.size());
-        foliageToBreak.addAll(leavesToBreak);
-        foliageToBreak.addAll(decorationsToBreak);
+        return leavesToBreak;
+    }
 
-        if (foliageToBreak.isEmpty()) {
-            return;
-        }
-
+    private void scheduleFoliageBreaks(Player player, Set<Block> foliage, Set<Material> validLeaves) {
         TreeMap<Integer, List<Block>> byHeight = new TreeMap<>(Comparator.reverseOrder());
-        for (Block foliageBlock : foliageToBreak) {
+        for (Block foliageBlock : foliage) {
             byHeight.computeIfAbsent(foliageBlock.getY(), ignored -> new ArrayList<>()).add(foliageBlock);
         }
 
@@ -106,7 +194,7 @@ public final class FoliageBreakService {
             scheduler.scheduleBlockBatches(layer, delayTicks, settings.maxBlocksPerTask(), batch -> {
                 for (Block leaf : batch) {
                     Material type = leaf.getType();
-                    if (!leaf.getChunk().isLoaded() || (!validLeaves.contains(type) && !TreeMaterials.isTreeDecoration(type))) {
+                    if (!validLeaves.contains(type) && !TreeMaterials.isTreeDecoration(type)) {
                         continue;
                     }
                     BlockBreakEvent syntheticBreak = syntheticBreakFactory.apply(player, leaf);
@@ -129,23 +217,104 @@ public final class FoliageBreakService {
         }
     }
 
-    private Set<Block> collectDecorationsToBreak(Set<Location> logPositions, Set<Block> leavesToBreak) {
+    private Set<Block> collectDecorationsInChunk(World world, List<int[]> allLogCoords, Set<Block> leavesToBreak,
+                                                 int chunkX, int chunkZ) {
         Set<Block> decorations = new HashSet<>();
         Set<Block> visited = new HashSet<>();
 
-        for (Location logLocation : logPositions) {
-            Block logBlock = logLocation.getBlock();
-            collectDecorationsAroundSeed(logBlock, decorations, visited);
+        // Decorations rooted in our chunk that are adjacent to ANY log (any chunk) or to
+        // a leaf already discovered in our chunk.
+        for (int[] log : allLogCoords) {
+            int lx = log[0];
+            int ly = log[1];
+            int lz = log[2];
+            for (int[] offset : neighborOffsets) {
+                int nx = lx + offset[0];
+                int ny = ly + offset[1];
+                int nz = lz + offset[2];
+                if ((nx >> 4) != chunkX || (nz >> 4) != chunkZ) {
+                    continue;
+                }
+                Block neighbor = world.getBlockAt(nx, ny, nz);
+                if (TreeMaterials.isTreeDecoration(neighbor.getType())) {
+                    collectDecorationCluster(neighbor, decorations, visited, chunkX, chunkZ);
+                }
+            }
+            // The block directly below a log (mangrove propagules, hanging moss, etc.).
+            int bx = lx;
+            int by = ly - 1;
+            int bz = lz;
+            if ((bx >> 4) == chunkX && (bz >> 4) == chunkZ) {
+                Block below = world.getBlockAt(bx, by, bz);
+                if (TreeMaterials.isTreeDecoration(below.getType())) {
+                    collectDecorationCluster(below, decorations, visited, chunkX, chunkZ);
+                }
+            }
         }
         for (Block leaf : leavesToBreak) {
-            collectDecorationsAroundSeed(leaf, decorations, visited);
+            collectDecorationsAroundSeed(leaf, decorations, visited, chunkX, chunkZ);
         }
 
         return decorations;
     }
 
-    private Set<Block> filterDecorationsOwnedByCurrentTree(World world, Set<Block> decorationsToBreak, Set<Block> leavesToBreak,
-                                                           Set<Block> treeBlocks, Material logType) {
+    private void collectDecorationsAroundSeed(Block seed, Set<Block> decorations, Set<Block> visited,
+                                              int chunkX, int chunkZ) {
+        for (int[] offset : neighborOffsets) {
+            Block neighbor = seed.getRelative(offset[0], offset[1], offset[2]);
+            if (!isInChunk(neighbor, chunkX, chunkZ)) {
+                continue;
+            }
+            if (TreeMaterials.isTreeDecoration(neighbor.getType())) {
+                collectDecorationCluster(neighbor, decorations, visited, chunkX, chunkZ);
+            }
+        }
+
+        Block below = seed.getRelative(0, -1, 0);
+        if (isInChunk(below, chunkX, chunkZ) && TreeMaterials.isTreeDecoration(below.getType())) {
+            collectDecorationCluster(below, decorations, visited, chunkX, chunkZ);
+        }
+    }
+
+    private void collectDecorationCluster(Block start, Set<Block> decorations, Set<Block> visited,
+                                          int chunkX, int chunkZ) {
+        Queue<Block> queue = new ArrayDeque<>();
+        if (!visited.add(start)) {
+            return;
+        }
+        queue.add(start);
+
+        while (!queue.isEmpty()) {
+            Block current = queue.poll();
+            if (!TreeMaterials.isTreeDecoration(current.getType())) {
+                continue;
+            }
+            decorations.add(current);
+
+            for (int[] offset : neighborOffsets) {
+                Block neighbor = current.getRelative(offset[0], offset[1], offset[2]);
+                if (!isInChunk(neighbor, chunkX, chunkZ)) {
+                    continue;
+                }
+                if (TreeMaterials.isTreeDecoration(neighbor.getType()) && visited.add(neighbor)) {
+                    queue.add(neighbor);
+                }
+            }
+
+            Block below = current.getRelative(0, -1, 0);
+            if (isInChunk(below, chunkX, chunkZ)
+                    && TreeMaterials.isTreeDecoration(below.getType())
+                    && visited.add(below)) {
+                queue.add(below);
+            }
+        }
+    }
+
+    private Set<Block> filterDecorationsOwnedByCurrentTreeInChunk(World world, Set<Block> decorationsToBreak,
+                                                                  Set<Block> leavesToBreak,
+                                                                  Set<Long> allTreeBlockCoords,
+                                                                  Material logType,
+                                                                  int chunkX, int chunkZ) {
         if (decorationsToBreak.isEmpty()) {
             return decorationsToBreak;
         }
@@ -167,53 +336,13 @@ public final class FoliageBreakService {
             }
         }
 
-        retainedDecorations.addAll(selectOwnedGenericDecorations(world, genericDecorationCandidates, leavesToBreak, treeBlocks));
+        retainedDecorations.addAll(selectOwnedGenericDecorations(world, genericDecorationCandidates,
+                leavesToBreak, allTreeBlockCoords, chunkX, chunkZ));
         if (TreeMaterials.isMangroveLog(logType)) {
-            retainedDecorations.addAll(selectOwnedMangroveRoots(world, mangroveRootCandidates, treeBlocks, logType));
+            retainedDecorations.addAll(selectOwnedMangroveRoots(world, mangroveRootCandidates,
+                    allTreeBlockCoords, logType, chunkX, chunkZ));
         }
         return retainedDecorations;
-    }
-
-    private void collectDecorationsAroundSeed(Block seed, Set<Block> decorations, Set<Block> visited) {
-        for (int[] offset : neighborOffsets) {
-            Block neighbor = seed.getRelative(offset[0], offset[1], offset[2]);
-            if (TreeMaterials.isTreeDecoration(neighbor.getType())) {
-                collectDecorationCluster(neighbor, decorations, visited);
-            }
-        }
-
-        Block below = seed.getRelative(0, -1, 0);
-        if (TreeMaterials.isTreeDecoration(below.getType())) {
-            collectDecorationCluster(below, decorations, visited);
-        }
-    }
-
-    private void collectDecorationCluster(Block start, Set<Block> decorations, Set<Block> visited) {
-        Queue<Block> queue = new ArrayDeque<>();
-        if (!visited.add(start)) {
-            return;
-        }
-        queue.add(start);
-
-        while (!queue.isEmpty()) {
-            Block current = queue.poll();
-            if (!current.getChunk().isLoaded() || !TreeMaterials.isTreeDecoration(current.getType())) {
-                continue;
-            }
-            decorations.add(current);
-
-            for (int[] offset : neighborOffsets) {
-                Block neighbor = current.getRelative(offset[0], offset[1], offset[2]);
-                if (TreeMaterials.isTreeDecoration(neighbor.getType()) && visited.add(neighbor)) {
-                    queue.add(neighbor);
-                }
-            }
-
-            Block below = current.getRelative(0, -1, 0);
-            if (TreeMaterials.isTreeDecoration(below.getType()) && visited.add(below)) {
-                queue.add(below);
-            }
-        }
     }
 
     private boolean isPropaguleOwnedByCurrentTree(Block propagule, Set<Block> leavesToBreak) {
@@ -221,17 +350,20 @@ public final class FoliageBreakService {
         return leavesToBreak.contains(above);
     }
 
-    private Set<Block> selectOwnedGenericDecorations(World world, Set<Block> decorationCandidates, Set<Block> leavesToBreak,
-                                                     Set<Block> treeBlocks) {
+    private Set<Block> selectOwnedGenericDecorations(World world, Set<Block> decorationCandidates,
+                                                     Set<Block> leavesToBreak, Set<Long> allTreeBlockCoords,
+                                                     int chunkX, int chunkZ) {
         if (decorationCandidates.isEmpty()) {
             return Set.of();
         }
 
-        Set<Block> ownSeeds = new HashSet<>(treeBlocks.size() + leavesToBreak.size());
-        ownSeeds.addAll(treeBlocks);
-        ownSeeds.addAll(leavesToBreak);
+        Set<Long> ownSeedCoords = new HashSet<>(allTreeBlockCoords);
+        for (Block leaf : leavesToBreak) {
+            ownSeedCoords.add(CoordinatePacker.pack(leaf.getX(), leaf.getY(), leaf.getZ()));
+        }
 
-        Set<Block> foreignSeeds = collectNearbyForeignTreeSeeds(world, decorationCandidates, ownSeeds);
+        Set<Long> foreignSeedCoords = collectNearbyForeignTreeSeedsInChunk(world, decorationCandidates,
+                ownSeedCoords, chunkX, chunkZ);
         Set<Block> retainedDecorations = new LinkedHashSet<>();
         Set<Material> materialTypes = new HashSet<>();
         for (Block candidate : decorationCandidates) {
@@ -239,13 +371,15 @@ public final class FoliageBreakService {
         }
 
         for (Material materialType : materialTypes) {
-            retainedDecorations.addAll(selectOwnedDecorationMaterial(decorationCandidates, materialType, ownSeeds, foreignSeeds));
+            retainedDecorations.addAll(selectOwnedDecorationMaterial(decorationCandidates, materialType,
+                    ownSeedCoords, foreignSeedCoords, chunkX, chunkZ));
         }
         return retainedDecorations;
     }
 
-    private Set<Block> selectOwnedDecorationMaterial(Set<Block> decorationCandidates, Material materialType, Set<Block> ownSeeds,
-                                                     Set<Block> foreignSeeds) {
+    private Set<Block> selectOwnedDecorationMaterial(Set<Block> decorationCandidates, Material materialType,
+                                                     Set<Long> ownSeedCoords, Set<Long> foreignSeedCoords,
+                                                     int chunkX, int chunkZ) {
         Set<Block> materialCandidates = new LinkedHashSet<>();
         for (Block candidate : decorationCandidates) {
             if (candidate.getType() == materialType) {
@@ -261,13 +395,13 @@ public final class FoliageBreakService {
         Queue<Block> queue = new ArrayDeque<>();
 
         for (Block candidate : materialCandidates) {
-            if (!isDecorationAnchor(candidate, ownSeeds)) {
+            if (!isDecorationAnchor(candidate, ownSeedCoords, chunkX, chunkZ)) {
                 continue;
             }
             if (!visited.add(candidate)) {
                 continue;
             }
-            if (!isCloserToCurrentTree(candidate, ownSeeds, foreignSeeds, true)) {
+            if (!isCloserToCurrentTree(candidate, ownSeedCoords, foreignSeedCoords, true)) {
                 continue;
             }
             retained.add(candidate);
@@ -278,10 +412,13 @@ public final class FoliageBreakService {
             Block current = queue.poll();
             for (int[] offset : neighborOffsets) {
                 Block neighbor = current.getRelative(offset[0], offset[1], offset[2]);
+                if (!isInChunk(neighbor, chunkX, chunkZ)) {
+                    continue;
+                }
                 if (!materialCandidates.contains(neighbor) || !visited.add(neighbor)) {
                     continue;
                 }
-                if (!isCloserToCurrentTree(neighbor, ownSeeds, foreignSeeds, false)) {
+                if (!isCloserToCurrentTree(neighbor, ownSeedCoords, foreignSeedCoords, false)) {
                     continue;
                 }
                 retained.add(neighbor);
@@ -289,8 +426,10 @@ public final class FoliageBreakService {
             }
 
             Block below = current.getRelative(0, -1, 0);
-            if (materialCandidates.contains(below) && visited.add(below)
-                    && isCloserToCurrentTree(below, ownSeeds, foreignSeeds, false)) {
+            if (isInChunk(below, chunkX, chunkZ)
+                    && materialCandidates.contains(below)
+                    && visited.add(below)
+                    && isCloserToCurrentTree(below, ownSeedCoords, foreignSeedCoords, false)) {
                 retained.add(below);
                 queue.add(below);
             }
@@ -299,30 +438,36 @@ public final class FoliageBreakService {
         return retained;
     }
 
-    private Set<Block> collectNearbyForeignTreeSeeds(World world, Set<Block> candidates, Set<Block> ownSeeds) {
-        Set<Long> ownSeedPacked = new HashSet<>(ownSeeds.size() * 2);
-        for (Block ownSeed : ownSeeds) {
-            ownSeedPacked.add(CoordinatePacker.pack(ownSeed.getX(), ownSeed.getY(), ownSeed.getZ()));
-        }
+    private Set<Long> collectNearbyForeignTreeSeedsInChunk(World world, Set<Block> candidates,
+                                                            Set<Long> ownSeedCoords,
+                                                            int chunkX, int chunkZ) {
+        int chunkMinX = chunkX << 4;
+        int chunkMaxX = chunkMinX + 15;
+        int chunkMinZ = chunkZ << 4;
+        int chunkMaxZ = chunkMinZ + 15;
+        int radius = settings.foreignLogScanRadius();
 
-        Set<Block> foreignSeeds = new HashSet<>();
-        Set<Long> scanned = new HashSet<>(ownSeedPacked);
+        Set<Long> foreignSeeds = new HashSet<>();
+        Set<Long> scanned = new HashSet<>(ownSeedCoords);
         for (Block candidate : candidates) {
-            for (int dx = -settings.foreignLogScanRadius(); dx <= settings.foreignLogScanRadius(); dx++) {
-                for (int dy = -settings.foreignLogScanRadius(); dy <= settings.foreignLogScanRadius(); dy++) {
-                    for (int dz = -settings.foreignLogScanRadius(); dz <= settings.foreignLogScanRadius(); dz++) {
-                        int x = candidate.getX() + dx;
-                        int y = candidate.getY() + dy;
-                        int z = candidate.getZ() + dz;
+            int cx = candidate.getX();
+            int cy = candidate.getY();
+            int cz = candidate.getZ();
+            int minX = Math.max(chunkMinX, cx - radius);
+            int maxX = Math.min(chunkMaxX, cx + radius);
+            int minZ = Math.max(chunkMinZ, cz - radius);
+            int maxZ = Math.min(chunkMaxZ, cz + radius);
+            for (int x = minX; x <= maxX; x++) {
+                for (int y = cy - radius; y <= cy + radius; y++) {
+                    for (int z = minZ; z <= maxZ; z++) {
                         long packed = CoordinatePacker.pack(x, y, z);
                         if (!scanned.add(packed)) {
                             continue;
                         }
-
                         Block scannedBlock = world.getBlockAt(x, y, z);
                         Material type = scannedBlock.getType();
                         if (TreeMaterials.isLog(type) || TreeMaterials.isLeafMaterial(type)) {
-                            foreignSeeds.add(scannedBlock);
+                            foreignSeeds.add(packed);
                         }
                     }
                 }
@@ -332,29 +477,34 @@ public final class FoliageBreakService {
         return foreignSeeds;
     }
 
-    private boolean isDecorationAnchor(Block decoration, Set<Block> ownSeeds) {
+    private boolean isDecorationAnchor(Block decoration, Set<Long> ownSeedCoords,
+                                       int chunkX, int chunkZ) {
         for (int[] offset : neighborOffsets) {
             Block neighbor = decoration.getRelative(offset[0], offset[1], offset[2]);
-            if (ownSeeds.contains(neighbor)) {
+            if (ownSeedCoords.contains(CoordinatePacker.pack(neighbor.getX(), neighbor.getY(), neighbor.getZ()))) {
                 return true;
             }
         }
         Block below = decoration.getRelative(0, -1, 0);
-        return ownSeeds.contains(below);
+        return ownSeedCoords.contains(CoordinatePacker.pack(below.getX(), below.getY(), below.getZ()));
     }
 
-    private Set<Block> selectOwnedMangroveRoots(World world, Set<Block> rootCandidates, Set<Block> treeBlocks, Material logType) {
+    private Set<Block> selectOwnedMangroveRoots(World world, Set<Block> rootCandidates,
+                                                Set<Long> allTreeBlockCoords, Material logType,
+                                                int chunkX, int chunkZ) {
         if (rootCandidates.isEmpty()) {
             return Set.of();
         }
 
-        Set<Block> foreignLogs = collectNearbyForeignLogs(world, rootCandidates, treeBlocks, logType);
+        Set<Long> foreignLogs = collectNearbyForeignLogsInChunk(world, rootCandidates, allTreeBlockCoords,
+                logType, chunkX, chunkZ);
         Set<Block> retainedRoots = new LinkedHashSet<>();
         Set<Block> visited = new HashSet<>();
         Queue<Block> queue = new ArrayDeque<>();
 
         for (Block candidate : rootCandidates) {
-            if (isRootAnchoredToCurrentTree(candidate, treeBlocks) && isCloserToCurrentTree(candidate, treeBlocks, foreignLogs, true)) {
+            if (isRootAnchoredToCurrentTree(candidate, allTreeBlockCoords)
+                    && isCloserToCurrentTree(candidate, allTreeBlockCoords, foreignLogs, true)) {
                 retainedRoots.add(candidate);
                 visited.add(candidate);
                 queue.add(candidate);
@@ -365,10 +515,13 @@ public final class FoliageBreakService {
             Block current = queue.poll();
             for (int[] offset : neighborOffsets) {
                 Block neighbor = current.getRelative(offset[0], offset[1], offset[2]);
+                if (!isInChunk(neighbor, chunkX, chunkZ)) {
+                    continue;
+                }
                 if (!rootCandidates.contains(neighbor) || !visited.add(neighbor)) {
                     continue;
                 }
-                if (!isCloserToCurrentTree(neighbor, treeBlocks, foreignLogs, false)) {
+                if (!isCloserToCurrentTree(neighbor, allTreeBlockCoords, foreignLogs, false)) {
                     continue;
                 }
                 retainedRoots.add(neighbor);
@@ -379,29 +532,34 @@ public final class FoliageBreakService {
         return retainedRoots;
     }
 
-    private Set<Block> collectNearbyForeignLogs(World world, Set<Block> candidates, Set<Block> treeBlocks, Material logType) {
-        Set<Long> ownLogPacked = new HashSet<>(treeBlocks.size() * 2);
-        for (Block treeBlock : treeBlocks) {
-            ownLogPacked.add(CoordinatePacker.pack(treeBlock.getX(), treeBlock.getY(), treeBlock.getZ()));
-        }
+    private Set<Long> collectNearbyForeignLogsInChunk(World world, Set<Block> candidates,
+                                                       Set<Long> ownLogCoords, Material logType,
+                                                       int chunkX, int chunkZ) {
+        int chunkMinX = chunkX << 4;
+        int chunkMaxX = chunkMinX + 15;
+        int chunkMinZ = chunkZ << 4;
+        int chunkMaxZ = chunkMinZ + 15;
+        int radius = settings.foreignLogScanRadius();
 
-        Set<Block> foreignLogs = new HashSet<>();
-        Set<Long> scanned = new HashSet<>(ownLogPacked);
+        Set<Long> foreignLogs = new HashSet<>();
+        Set<Long> scanned = new HashSet<>(ownLogCoords);
         for (Block candidate : candidates) {
-            for (int dx = -settings.foreignLogScanRadius(); dx <= settings.foreignLogScanRadius(); dx++) {
-                for (int dy = -settings.foreignLogScanRadius(); dy <= settings.foreignLogScanRadius(); dy++) {
-                    for (int dz = -settings.foreignLogScanRadius(); dz <= settings.foreignLogScanRadius(); dz++) {
-                        int x = candidate.getX() + dx;
-                        int y = candidate.getY() + dy;
-                        int z = candidate.getZ() + dz;
+            int cx = candidate.getX();
+            int cy = candidate.getY();
+            int cz = candidate.getZ();
+            int minX = Math.max(chunkMinX, cx - radius);
+            int maxX = Math.min(chunkMaxX, cx + radius);
+            int minZ = Math.max(chunkMinZ, cz - radius);
+            int maxZ = Math.min(chunkMaxZ, cz + radius);
+            for (int x = minX; x <= maxX; x++) {
+                for (int y = cy - radius; y <= cy + radius; y++) {
+                    for (int z = minZ; z <= maxZ; z++) {
                         long packed = CoordinatePacker.pack(x, y, z);
                         if (!scanned.add(packed)) {
                             continue;
                         }
-
-                        Block scannedBlock = world.getBlockAt(x, y, z);
-                        if (scannedBlock.getType() == logType) {
-                            foreignLogs.add(scannedBlock);
+                        if (world.getBlockAt(x, y, z).getType() == logType) {
+                            foreignLogs.add(packed);
                         }
                     }
                 }
@@ -411,64 +569,82 @@ public final class FoliageBreakService {
         return foreignLogs;
     }
 
-    private boolean isRootAnchoredToCurrentTree(Block root, Set<Block> treeBlocks) {
-        for (Block treeBlock : treeBlocks) {
-            if (Math.abs(root.getX() - treeBlock.getX()) <= 1
-                    && Math.abs(root.getY() - treeBlock.getY()) <= 1
-                    && Math.abs(root.getZ() - treeBlock.getZ()) <= 1) {
-                return true;
+    private boolean isRootAnchoredToCurrentTree(Block root, Set<Long> allTreeBlockCoords) {
+        int rx = root.getX();
+        int ry = root.getY();
+        int rz = root.getZ();
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (allTreeBlockCoords.contains(CoordinatePacker.pack(rx + dx, ry + dy, rz + dz))) {
+                        return true;
+                    }
+                }
             }
         }
         return false;
     }
 
-    private boolean isCloserToCurrentTree(Block block, Set<Block> treeBlocks, Set<Block> foreignLogs, boolean allowEqualDistanceForAnchor) {
-        int ourDistance = minDistance(block, treeBlocks);
-        if (foreignLogs.isEmpty()) {
+    private boolean isCloserToCurrentTree(Block block, Set<Long> ownSeedCoords, Set<Long> foreignCoords,
+                                          boolean allowEqualDistanceForAnchor) {
+        if (foreignCoords.isEmpty()) {
             return true;
         }
-
-        int foreignDistance = minDistance(block, foreignLogs);
+        int bx = block.getX();
+        int by = block.getY();
+        int bz = block.getZ();
+        int ourDistance = minManhattanDistance(bx, by, bz, ownSeedCoords);
+        int foreignDistance = minManhattanDistance(bx, by, bz, foreignCoords);
         if (ourDistance < foreignDistance) {
             return true;
         }
         return allowEqualDistanceForAnchor && ourDistance == foreignDistance;
     }
 
-    private int minDistance(Block source, Set<Block> targets) {
-        int minDistance = Integer.MAX_VALUE;
-        for (Block target : targets) {
-            int distance = Math.abs(source.getX() - target.getX())
-                    + Math.abs(source.getY() - target.getY())
-                    + Math.abs(source.getZ() - target.getZ());
-            minDistance = Math.min(minDistance, distance);
-            if (minDistance <= 1) {
-                return minDistance;
+    private int minManhattanDistance(int x, int y, int z, Set<Long> packedTargets) {
+        int min = Integer.MAX_VALUE;
+        for (long packed : packedTargets) {
+            int tx = CoordinatePacker.unpackX(packed);
+            int ty = CoordinatePacker.unpackY(packed);
+            int tz = CoordinatePacker.unpackZ(packed);
+            int distance = Math.abs(x - tx) + Math.abs(y - ty) + Math.abs(z - tz);
+            if (distance < min) {
+                min = distance;
+                if (min <= 1) {
+                    return min;
+                }
             }
         }
-        return minDistance;
+        return min;
     }
 
-    private void filterLeavesOwnedByOtherTrees(World world, Set<Block> leavesToBreak, Set<Block> treeBlocks, Material logType) {
-        Set<Long> ourLogPacked = new HashSet<>(treeBlocks.size() * 2);
-        for (Block block : treeBlocks) {
-            ourLogPacked.add(CoordinatePacker.pack(block.getX(), block.getY(), block.getZ()));
+    private void filterLeavesOwnedByForeignLogsInChunk(World world, Set<Block> leavesToBreak,
+                                                       Set<Long> allTreeBlockCoords, Material logType,
+                                                       int chunkX, int chunkZ) {
+        if (leavesToBreak.isEmpty()) {
+            return;
         }
+        int chunkMinX = chunkX << 4;
+        int chunkMaxX = chunkMinX + 15;
+        int chunkMinZ = chunkZ << 4;
+        int chunkMaxZ = chunkMinZ + 15;
+        int radius = settings.foreignLogScanRadius();
 
         Set<Long> foreignLogPacked = new HashSet<>();
-        Set<Long> checkedPositions = new HashSet<>(ourLogPacked);
+        Set<Long> scanned = new HashSet<>(allTreeBlockCoords);
         for (Block leaf : leavesToBreak) {
-            int leafX = leaf.getX();
-            int leafY = leaf.getY();
-            int leafZ = leaf.getZ();
-            for (int dx = -settings.foreignLogScanRadius(); dx <= settings.foreignLogScanRadius(); dx++) {
-                for (int dy = -settings.foreignLogScanRadius(); dy <= settings.foreignLogScanRadius(); dy++) {
-                    for (int dz = -settings.foreignLogScanRadius(); dz <= settings.foreignLogScanRadius(); dz++) {
-                        int x = leafX + dx;
-                        int y = leafY + dy;
-                        int z = leafZ + dz;
+            int lx = leaf.getX();
+            int ly = leaf.getY();
+            int lz = leaf.getZ();
+            int minX = Math.max(chunkMinX, lx - radius);
+            int maxX = Math.min(chunkMaxX, lx + radius);
+            int minZ = Math.max(chunkMinZ, lz - radius);
+            int maxZ = Math.min(chunkMaxZ, lz + radius);
+            for (int x = minX; x <= maxX; x++) {
+                for (int y = ly - radius; y <= ly + radius; y++) {
+                    for (int z = minZ; z <= maxZ; z++) {
                         long packed = CoordinatePacker.pack(x, y, z);
-                        if (!checkedPositions.add(packed)) {
+                        if (!scanned.add(packed)) {
                             continue;
                         }
                         if (world.getBlockAt(x, y, z).getType() == logType) {
@@ -483,48 +659,25 @@ public final class FoliageBreakService {
             return;
         }
 
-        int[][] ourCoords = new int[treeBlocks.size()][3];
-        int index = 0;
-        for (Block block : treeBlocks) {
-            ourCoords[index][0] = block.getX();
-            ourCoords[index][1] = block.getY();
-            ourCoords[index][2] = block.getZ();
-            index++;
-        }
-
-        int[][] foreignCoords = new int[foreignLogPacked.size()][3];
-        index = 0;
-        for (long packed : foreignLogPacked) {
-            foreignCoords[index][0] = CoordinatePacker.unpackX(packed);
-            foreignCoords[index][1] = CoordinatePacker.unpackY(packed);
-            foreignCoords[index][2] = CoordinatePacker.unpackZ(packed);
-            index++;
-        }
-
         leavesToBreak.removeIf(leaf -> {
-            int leafX = leaf.getX();
-            int leafY = leaf.getY();
-            int leafZ = leaf.getZ();
-
-            int minOurDistance = Integer.MAX_VALUE;
-            for (int[] coords : ourCoords) {
-                int distance = Math.abs(leafX - coords[0]) + Math.abs(leafY - coords[1]) + Math.abs(leafZ - coords[2]);
-                minOurDistance = Math.min(minOurDistance, distance);
-                if (minOurDistance <= 1) {
-                    break;
-                }
-            }
-
-            int minForeignDistance = Integer.MAX_VALUE;
-            for (int[] coords : foreignCoords) {
-                int distance = Math.abs(leafX - coords[0]) + Math.abs(leafY - coords[1]) + Math.abs(leafZ - coords[2]);
-                minForeignDistance = Math.min(minForeignDistance, distance);
-                if (minForeignDistance <= 1) {
-                    break;
-                }
-            }
-
+            int lx = leaf.getX();
+            int ly = leaf.getY();
+            int lz = leaf.getZ();
+            int minOurDistance = minManhattanDistance(lx, ly, lz, allTreeBlockCoords);
+            int minForeignDistance = minManhattanDistance(lx, ly, lz, foreignLogPacked);
             return minForeignDistance <= minOurDistance;
         });
+    }
+
+    private static boolean isInChunk(Block block, int chunkX, int chunkZ) {
+        return (block.getX() >> 4) == chunkX && (block.getZ() >> 4) == chunkZ;
+    }
+
+    private static Set<Long> packBlockCoords(Set<Block> blocks) {
+        Set<Long> packed = new HashSet<>(blocks.size() * 2);
+        for (Block block : blocks) {
+            packed.add(CoordinatePacker.pack(block.getX(), block.getY(), block.getZ()));
+        }
+        return packed;
     }
 }
