@@ -8,7 +8,7 @@ import java.util.function.BiFunction;
 
 public final class PluginMetricsBootstrap {
 
-    static final int BSTATS_PLUGIN_ID = 27579;
+    static final int BSTATS_PLUGIN_ID = 31348;
 
     private final BiFunction<JavaPlugin, Integer, Object> metricsFactory;
 

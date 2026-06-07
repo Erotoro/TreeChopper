@@ -37,7 +37,6 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
-import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
@@ -62,8 +61,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class TreeChopper extends JavaPlugin implements Listener {
-
-    private static final String FB_TAG = "treechopper_fb";
 
     private static final int[][] NEIGHBOR_OFFSETS = createCubeOffsets(1, false);
     private static final int[][] CARDINAL_OFFSETS = new int[][]{{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
@@ -282,19 +279,6 @@ public final class TreeChopper extends JavaPlugin implements Listener {
                 markPlacedLogsDirty();
             }
         }
-    }
-
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onFallingBlockLand(EntityChangeBlockEvent event) {
-        if (!(event.getEntity() instanceof FallingBlock fallingBlock)) {
-            return;
-        }
-        if (!fallingBlock.getScoreboardTags().contains(FB_TAG)) {
-            return;
-        }
-        activeFallingBlocks.remove(fallingBlock.getUniqueId());
-        event.setCancelled(true);
-        fallingBlock.remove();
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -533,11 +517,16 @@ public final class TreeChopper extends JavaPlugin implements Listener {
         coreProtectService.logRemoval(player.getName(), originalState);
 
         Location spawnLocation = blockLocation.clone().add(0.5, 0.0, 0.5);
-        FallingBlock fallingBlock = spawnFallingBlockCompat(block, spawnLocation, data);
+        FallingBlock fallingBlock = block.getWorld().spawnFallingBlock(spawnLocation, data);
         fallingBlock.setDropItem(false);
         fallingBlock.setHurtEntities(false);
         fallingBlock.setGravity(true);
-        fallingBlock.addScoreboardTag(FB_TAG);
+        // Purely cosmetic: the log is already broken and its drops handled. setCancelDrop makes the
+        // entity vanish on landing instead of forming a (duplicate) block, so it never fires
+        // EntityChangeBlockEvent. That lets us avoid any listener that would touch falling-block
+        // state for entities we don't own — the access that spams Folia/Luminol region threads when
+        // unrelated falling blocks (e.g. sand farms) land.
+        fallingBlock.setCancelDrop(true);
 
         double spreadX = spawnLocation.getX() - centerX;
         double spreadZ = spawnLocation.getZ() - centerZ;
@@ -549,13 +538,6 @@ public final class TreeChopper extends JavaPlugin implements Listener {
 
         activeFallingBlocks.add(fallingBlock.getUniqueId());
         scheduler.scheduleDelayed(spawnLocation, 60L, () -> cleanupFallingBlock(fallingBlock));
-    }
-
-    @SuppressWarnings("deprecation")
-    private FallingBlock spawnFallingBlockCompat(Block sourceBlock, Location spawnLocation, BlockData data) {
-        // Spigot API (1.21.x baseline for universal JAR) does not provide a stable non-deprecated
-        // alternative that allows setting the exact falling block data at spawn time.
-        return sourceBlock.getWorld().spawnFallingBlock(spawnLocation, data);
     }
 
     private boolean isLog(Block block) {

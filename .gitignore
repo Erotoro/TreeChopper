@@ -4,3 +4,8 @@ bin/
 .idea/
 .vscode/
 *.iml
+
+# Local agent tooling (machine-local; do not commit)
+.claude/
+.codex/
+AGENTS.md

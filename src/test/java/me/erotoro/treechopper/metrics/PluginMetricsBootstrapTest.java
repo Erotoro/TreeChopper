@@ -27,6 +27,6 @@ class PluginMetricsBootstrapTest {
         bootstrap.initialize(plugin);
 
         assertEquals(plugin, capturedPlugin.get());
-        assertEquals(27579, capturedPluginId.get());
+        assertEquals(31348, capturedPluginId.get());
     }
 }

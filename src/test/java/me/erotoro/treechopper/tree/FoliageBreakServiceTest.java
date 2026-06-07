@@ -259,7 +259,6 @@ class FoliageBreakServiceTest {
     private static TaskSchedulerFacade createInlineScheduler() {
         TaskSchedulerFacade scheduler = mock(TaskSchedulerFacade.class);
         doAnswer(invocation -> {
-            @SuppressWarnings("unchecked")
             java.util.function.Consumer<List<Block>> action = invocation.getArgument(3);
             action.accept(invocation.getArgument(0));
             return null;
