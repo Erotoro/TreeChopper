@@ -68,7 +68,6 @@ public final class TreeSearchService {
             }
         }
 
-        int height = topY - baseY + 1;
         int maxHorizontalDist = isMega ? 8 : 6;
         double trunkCenterX = (isMega ? trunkColumns.stream().mapToDouble(column -> column[0]).average().orElse(trunkX) : trunkX) + 0.5;
         double trunkCenterZ = (isMega ? trunkColumns.stream().mapToDouble(column -> column[1]).average().orElse(trunkZ) : trunkZ) + 0.5;

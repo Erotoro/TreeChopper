@@ -2,7 +2,6 @@ package me.erotoro.treechopper.tree;
 
 import me.erotoro.treechopper.TreeChopperSettings;
 import me.erotoro.treechopper.coreprotect.CoreProtectService;
-import me.erotoro.treechopper.model.ChunkKey;
 import me.erotoro.treechopper.scheduler.TaskSchedulerFacade;
 import me.erotoro.treechopper.util.CoordinatePacker;
 import org.bukkit.Location;
@@ -16,15 +15,12 @@ import org.bukkit.event.block.BlockBreakEvent;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.UUID;
 import java.util.function.BiFunction;
 
 /**

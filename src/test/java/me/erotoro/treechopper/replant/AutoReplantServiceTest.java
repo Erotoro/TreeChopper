@@ -61,7 +61,7 @@ class AutoReplantServiceTest {
 
         BlockKey targetKeyA = new BlockKey(worldId, 10, 64, 10);
         BlockKey targetKeyB = new BlockKey(worldId, 11, 64, 10);
-        when(layoutPlanner.plan(any(Set.class), any(Boolean.class), any(Boolean.class), any(AutoReplantSettings.MegaMode.class)))
+        when(layoutPlanner.plan(org.mockito.ArgumentMatchers.<Set<BlockKey>>any(), any(Boolean.class), any(Boolean.class), any(AutoReplantSettings.MegaMode.class)))
                 .thenReturn(new ReplantLayout(List.of(targetKeyA, targetKeyB)));
 
         PlayerInventory inventory = mock(PlayerInventory.class);
