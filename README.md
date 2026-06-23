@@ -7,9 +7,9 @@
 A lightweight Paper/Spigot/Folia plugin that fells entire trees with a single axe swing — logs collapse layer by layer with real physics, leaves decay automatically, and saplings replant themselves.
 
 [![Platform](https://img.shields.io/badge/platform-Paper%20%7C%20Spigot%20%7C%20Folia-brightgreen?style=flat-square)](https://papermc.io/)
-[![Minecraft](https://img.shields.io/badge/Minecraft-1.21%2B-red?style=flat-square)](https://modrinth.com/plugin/treechopper-ultra)
-[![Java](https://img.shields.io/badge/Java-21%2B-orange?style=flat-square)](https://adoptium.net/)
-[![Tests](https://img.shields.io/badge/tests-52%20passing-success?style=flat-square)](#)
+[![Minecraft](https://img.shields.io/badge/Minecraft-1.16--26.1.2-red?style=flat-square)](https://modrinth.com/plugin/treechopper-ultra)
+[![Java](https://img.shields.io/badge/Java-8%2B%20runtime-orange?style=flat-square)](https://adoptium.net/)
+[![Tests](https://img.shields.io/badge/tests-63%20passing-success?style=flat-square)](#)
 [![bStats](https://img.shields.io/badge/bStats-live%20metrics-blue?style=flat-square)](https://bstats.org/plugin/bukkit/TreeChopperUltra/31348)
 [![Ko-fi](https://img.shields.io/badge/Support%20me-Ko--fi-ff5f5f?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/erotoro)
 
@@ -44,9 +44,16 @@ A lightweight Paper/Spigot/Folia plugin that fells entire trees with a single ax
 - **CoreProtect logging** — every log and leaf broken by the plugin is recorded under the player's name, so `/co rollback` and `/co lookup` work correctly for the full tree
 - **Auto-replant** — after a tree is felled a sapling is automatically placed at the base; supports mega trees, configurable inventory consumption, and protection-aware placement
 
+### Statistics & leaderboards
+- **Per-player stats** — trees felled and logs broken are tracked per player and shown with `/treechopper stats`
+- **Leaderboard** — `/treechopper top` lists the best lumberjacks; ranks are exposed to other plugins
+- **PlaceholderAPI** — built-in expansion for scoreboards, tab, holograms and chat (see [Placeholders](#placeholders))
+- **Dependency-free storage** — stats live in a tiny embedded file written atomically off the main thread; no database driver, no native libraries, no bloat (the release jar stays ~200 KB). The storage layer is interface-based, so a MySQL backend for cross-server networks can be added without touching the rest of the plugin
+
 ### Performance
 - **Chunk-batched scheduling** — blocks are grouped by chunk and processed in small batches per tick, keeping TPS impact minimal even on large trees
 - **Configurable limits** — `max-logs`, `max-blocks-per-task`, BFS radii, and detection thresholds are all tunable in `config.yml`
+- **Async, non-blocking stats** — all stat I/O runs on a dedicated thread; PlaceholderAPI lookups read in-memory caches and never touch disk (Folia-safe)
 - **Hot reload** — `/treechopper reload` reloads config, localization, and all services without a server restart
 
 ---
@@ -89,9 +96,25 @@ Player breaks a log with an axe
 | **WorldGuard** | Blocks felling inside protected regions |
 | **GriefPrevention** | Blocks felling inside claimed land |
 | **CoreProtect** | Logs every broken block and replanted sapling under the player's name |
+| **PlaceholderAPI** | Exposes per-player stats and leaderboard placeholders |
 | **bStats** | Anonymous usage metrics are embedded into the release jar for lightweight plugin statistics |
 
 All integrations are **soft dependencies** — the plugin works perfectly without any of them installed. `bStats` is bundled directly into the release jar and does not require any extra setup.
+
+### Placeholders
+
+Requires [PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/). Identifier: `treechopper`.
+
+| Placeholder | Description |
+|---|---|
+| `%treechopper_trees%` | Trees the player has felled |
+| `%treechopper_logs%` | Logs the player has broken |
+| `%treechopper_rank%` | Player's leaderboard rank (`-` if unranked) |
+| `%treechopper_top_name_<n>%` | Name of the #`<n>` leaderboard entry |
+| `%treechopper_top_trees_<n>%` | Trees felled by the #`<n>` entry |
+| `%treechopper_top_logs_<n>%` | Logs broken by the #`<n>` entry |
+
+> Per-player placeholders (`trees`/`logs`/`rank`) resolve for online players; leaderboard placeholders (`top_*`) work for everyone.
 
 ---
 
@@ -110,7 +133,7 @@ Live usage statistics for TreeChopper are available on the public [bStats page](
 
 ```yaml
 language:
-  default: en          # en · ru · uk
+  default: en          # en · ru · uk · pl · de · fr · es · it · cs
   fallback: en
 
 limits:
@@ -176,28 +199,31 @@ auto-replant:
 |---|---|---|---|
 | `/treechopper reload` | `treechopper.reload` | op | Reloads config, localization, and all services |
 | `/treechopper toggle` | `treechopper.toggle` | everyone | Enables or disables tree chopping for yourself |
+| `/treechopper stats` | `treechopper.stats` | everyone | Shows your own trees felled, logs broken and leaderboard rank |
+| `/treechopper top` | `treechopper.top` | everyone | Shows the top lumberjacks leaderboard |
 
 ---
 
 ## Installation
 
-1. Download `TreeChopper-1.6.1.jar` and drop it into your server `plugins/` folder.
+1. Download `TreeChopper-1.7.0.jar` and drop it into your server `plugins/` folder.
 2. Restart the server — `config.yml` and language files are created automatically.
 3. Adjust settings in `config.yml` as needed.
 4. Apply changes without restarting: `/treechopper reload`
 
 ### Building from source
 
-- Build the release jar with embedded `bStats`: `./gradlew shadowJar`
-- Output artifact: `build/libs/TreeChopper-1.6.1.jar`
+- Build the release jar with embedded `bStats`: `./gradlew build`
+- Output artifact: `build/libs/TreeChopper-1.7.0.jar` (compiled on Java 21, then downgraded to Java 8 bytecode so a single jar runs across the whole supported range)
+- **Building from source requires JDK 21**; the produced jar only requires Java 8+ at runtime.
 
-**Requirements:** Paper, Spigot, or Folia · Java 21+ · Minecraft 1.21-26.1.2
+**Requirements:** Paper, Spigot, or Folia · Java 8+ runtime · Minecraft 1.16-26.1.2
 
 ---
 
 ## Localization
 
-TreeChopper ships with built-in translations for **English**, **Russian**, and **Ukrainian**. Language files live in `plugins/TreeChopper/lang/` and can be edited freely. Set your preferred language in `config.yml` under `language.default`.
+TreeChopper ships with built-in translations for **English**, **Russian**, **Ukrainian**, **Polish**, **German**, **French**, **Spanish**, **Italian**, and **Czech**. Language files live in `plugins/TreeChopper/lang/` and can be edited freely. Supported language codes: `en`, `ru`, `uk`, `pl`, `de`, `fr`, `es`, `it`, `cs`. Set your preferred language in `config.yml` under `language.default`.
 
 ---
 
@@ -240,9 +266,16 @@ TreeChopper ships with built-in translations for **English**, **Russian**, and *
 - **CoreProtect** — каждое сломанное бревно и посаженный саженец логируются под именем игрока; `/co rollback` работает корректно для всего дерева
 - **Авто-посадка** — после рубки саженец автоматически высаживается у основания; поддержка мега-деревьев, настраиваемый расход инвентаря, уважение защиты
 
+### Статистика и лидерборды
+- **Личная статистика** — срубленные деревья и сломанные брёвна считаются по каждому игроку; смотреть через `/treechopper stats`
+- **Лидерборд** — `/treechopper top` показывает лучших лесорубов; место в топе доступно другим плагинам
+- **PlaceholderAPI** — встроенный экспеншн для скорборда, таба, голограмм и чата (см. [Плейсхолдеры](#плейсхолдеры))
+- **Хранилище без зависимостей** — статистика лежит в крошечном встроенном файле, который пишется атомарно вне главного потока; без драйверов БД, без нативных библиотек, без раздувания (релизный джар ~200 КБ). Слой хранения на интерфейсе — MySQL для сетей серверов можно добавить, не трогая остальной плагин
+
 ### Производительность
 - **Батчинг по чанкам** — блоки группируются по чанкам и обрабатываются небольшими порциями за тик
 - **Настраиваемые лимиты** — `max-logs`, `max-blocks-per-task`, радиусы BFS и пороги детекции задаются в `config.yml`
+- **Асинхронная статистика** — весь ввод-вывод статистики на отдельном потоке; запросы PlaceholderAPI читают кэш в памяти и не трогают диск (безопасно для Folia)
 - **Горячая перезагрузка** — `/treechopper reload` перезагружает конфиг, локализацию и все сервисы без рестарта
 
 ---
@@ -285,8 +318,24 @@ TreeChopper ships with built-in translations for **English**, **Russian**, and *
 | **WorldGuard** | Блокирует рубку внутри защищённых регионов |
 | **GriefPrevention** | Блокирует рубку внутри захваченных территорий |
 | **CoreProtect** | Логирует каждый сломанный блок и посаженный саженец на имя игрока |
+| **PlaceholderAPI** | Предоставляет плейсхолдеры личной статистики и лидерборда |
 
 Все интеграции — **мягкие зависимости**: плагин работает без них.
+
+### Плейсхолдеры
+
+Требуется [PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/). Идентификатор: `treechopper`.
+
+| Плейсхолдер | Описание |
+|---|---|
+| `%treechopper_trees%` | Сколько деревьев срубил игрок |
+| `%treechopper_logs%` | Сколько брёвен сломал игрок |
+| `%treechopper_rank%` | Место игрока в топе (`-`, если вне топа) |
+| `%treechopper_top_name_<n>%` | Имя игрока на позиции `<n>` |
+| `%treechopper_top_trees_<n>%` | Деревья игрока на позиции `<n>` |
+| `%treechopper_top_logs_<n>%` | Брёвна игрока на позиции `<n>` |
+
+> Личные плейсхолдеры (`trees`/`logs`/`rank`) работают для онлайн-игроков; плейсхолдеры лидерборда (`top_*`) — для всех.
 
 ---
 
@@ -297,7 +346,7 @@ TreeChopper ships with built-in translations for **English**, **Russian**, and *
 
 ```yaml
 language:
-  default: ru          # en · ru · uk
+  default: ru          # en · ru · uk · pl · de · fr · es · it · cs
   fallback: en
 
 limits:
@@ -363,20 +412,24 @@ auto-replant:
 |---|---|---|---|
 | `/treechopper reload` | `treechopper.reload` | op | Перезагружает конфиг, локализацию и все сервисы |
 | `/treechopper toggle` | `treechopper.toggle` | все игроки | Включает или отключает рубку деревьев для себя |
+| `/treechopper stats` | `treechopper.stats` | все игроки | Показывает ваши срубленные деревья, сломанные брёвна и место в топе |
+| `/treechopper top` | `treechopper.top` | все игроки | Показывает таблицу лучших лесорубов |
 
 ---
 
 ## Установка
 
-1. Скачай `TreeChopper-1.6.1.jar` и положи его в папку `plugins/` сервера.
+1. Скачай `TreeChopper-1.7.0.jar` и положи его в папку `plugins/` сервера.
 2. Перезапусти сервер — `config.yml` и языковые файлы создадутся автоматически.
 3. Настрой параметры в `config.yml` под свой сервер.
 4. Применяй изменения без рестарта: `/treechopper reload`
 
-**Требования:** Paper, Spigot или Folia · Java 21+ · Minecraft 1.21-26.1.2
+**Требования:** Paper, Spigot или Folia · Java 8+ (рантайм) · Minecraft 1.16-26.1.2
+
+> Сборка из исходников требует JDK 21; готовый JAR работает на Java 8+ (байткод понижается через JvmDowngrader).
 
 ---
 
 ## Локализация
 
-TreeChopper поставляется с встроенными переводами на **английский**, **русский** и **украинский** языки. Файлы лежат в `plugins/TreeChopper/lang/` и редактируются свободно. Выбери язык в `config.yml` в разделе `language.default`.
+TreeChopper поставляется с встроенными переводами на **английский**, **русский**, **украинский**, **польский**, **немецкий**, **французский**, **испанский**, **итальянский** и **чешский** языки. Файлы лежат в `plugins/TreeChopper/lang/` и редактируются свободно. Поддерживаемые коды языков: `en`, `ru`, `uk`, `pl`, `de`, `fr`, `es`, `it`, `cs`. Выбери язык в `config.yml` в разделе `language.default`.
