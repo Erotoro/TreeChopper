@@ -1,12 +1,22 @@
 messages:
   command:
-    usage: "&eUsage: /{label} <reload|toggle>"
+    usage: "&eUsage: /{label} <reload|toggle|stats|top>"
     reload:
       success: "&aTreeChopper reloaded. Loaded placed logs: {placedLogs}, loaded player toggles: {playerToggles}."
     toggle:
       enabled: "&aTreeChopper enabled."
       disabled: "&cTreeChopper disabled."
       feature-disabled: "&cTreeChopper toggle feature is disabled in config."
+    stats:
+      header: "&2&l TreeChopper stats"
+      trees: "&7Trees felled: &a{trees}"
+      logs: "&7Logs broken: &a{logs}"
+      rank: "&7Leaderboard rank: &a#{rank}"
+      disabled: "&cStatistics are disabled on this server."
+    top:
+      header: "&2&l Top lumberjacks"
+      line: "&7#{pos} &f{name} &7- &a{trees} &7trees, &a{logs} &7logs"
+      empty: "&7No tree-chopping records yet."
   errors:
     no-permission: "&cYou do not have permission to use this command."
     player-only: "&cOnly players can use this command."

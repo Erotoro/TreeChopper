@@ -1,8 +1,8 @@
 package me.erotoro.treechopper.replant;
 
+import me.erotoro.treechopper.compat.BlockPlacementCompat;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.Tag;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 
@@ -18,7 +18,7 @@ public final class PlantingValidator {
     private final Predicate<Material> airChecker;
 
     public PlantingValidator() {
-        this(Bukkit::createBlockData, material -> Tag.REPLACEABLE.isTagged(material), Material::isBlock, Material::isAir);
+        this(Bukkit::createBlockData, BlockPlacementCompat::isReplaceable, Material::isBlock, Material::isAir);
     }
 
     PlantingValidator(Function<Material, BlockData> blockDataFactory, Predicate<Material> replaceableChecker,
@@ -50,10 +50,10 @@ public final class PlantingValidator {
         }
 
         BlockData plantingData = blockDataFactory.apply(plantingMaterial);
-        if (!target.canPlace(plantingData)) {
+        if (!BlockPlacementCompat.canPlace(target, plantingData)) {
             return ValidationResult.failure("Block#canPlace denied planting.");
         }
-        if (!plantingData.isSupported(target)) {
+        if (!BlockPlacementCompat.isSupported(plantingData, target)) {
             return ValidationResult.failure("BlockData#isSupported denied planting.");
         }
         return ValidationResult.success();

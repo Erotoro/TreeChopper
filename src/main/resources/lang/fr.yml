@@ -1,0 +1,22 @@
+messages:
+  command:
+    usage: "&eUtilisation : /{label} <reload|toggle|stats|top>"
+    reload:
+      success: "&aTreeChopper rechargé. Bûches marquées chargées : {placedLogs}, préférences des joueurs chargées : {playerToggles}."
+    toggle:
+      enabled: "&aTreeChopper activé."
+      disabled: "&cTreeChopper désactivé."
+      feature-disabled: "&cLa fonction d'activation de TreeChopper est désactivée dans la configuration."
+    stats:
+      header: "&2&l Statistiques TreeChopper"
+      trees: "&7Arbres abattus : &a{trees}"
+      logs: "&7Bûches cassées : &a{logs}"
+      rank: "&7Rang dans le classement : &a#{rank}"
+      disabled: "&cLes statistiques sont désactivées sur ce serveur."
+    top:
+      header: "&2&l Meilleurs bûcherons"
+      line: "&7#{pos} &f{name} &7- &a{trees} &7arbres, &a{logs} &7bûches"
+      empty: "&7Aucun record d'abattage d'arbres pour le moment."
+  errors:
+    no-permission: "&cVous n'avez pas la permission d'utiliser cette commande."
+    player-only: "&cSeuls les joueurs peuvent utiliser cette commande."

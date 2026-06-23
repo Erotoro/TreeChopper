@@ -1,0 +1,22 @@
+messages:
+  command:
+    usage: "&ePoužití: /{label} <reload|toggle|stats|top>"
+    reload:
+      success: "&aTreeChopper byl znovu načten. Načtené označené klády: {placedLogs}, načtené přepínače hráčů: {playerToggles}."
+    toggle:
+      enabled: "&aTreeChopper zapnut."
+      disabled: "&cTreeChopper vypnut."
+      feature-disabled: "&cFunkce přepínání TreeChopperu je v konfiguraci vypnutá."
+    stats:
+      header: "&2&l Statistiky TreeChopperu"
+      trees: "&7Pokácené stromy: &a{trees}"
+      logs: "&7Rozbité klády: &a{logs}"
+      rank: "&7Pozice v žebříčku: &a#{rank}"
+      disabled: "&cStatistiky jsou na tomto serveru vypnuté."
+    top:
+      header: "&2&l Nejlepší dřevorubci"
+      line: "&7#{pos} &f{name} &7- &a{trees} &7stromů, &a{logs} &7klád"
+      empty: "&7Zatím tu nejsou žádné záznamy o kácení stromů."
+  errors:
+    no-permission: "&cNemáš oprávnění použít tento příkaz."
+    player-only: "&cTento příkaz mohou používat jen hráči."

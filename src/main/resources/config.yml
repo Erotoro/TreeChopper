@@ -1,4 +1,5 @@
 language:
+  # Supported built-in languages: en, ru, uk, pl, de, fr, es, it, cs
   default: en
   fallback: en
 
@@ -41,6 +42,24 @@ integrations:
   coreprotect:
     enabled: true
     debug: false
+
+# Player statistics, leaderboards and PlaceholderAPI placeholders.
+# NOTE: changes here require a full server restart (not applied by /treechopper reload).
+stats:
+  # Master switch for stat tracking, /treechopper stats|top and PlaceholderAPI.
+  enabled: true
+  storage:
+    # file  -> dependency-free embedded store (default, recommended for single servers)
+    # mysql -> reserved for a future cross-server backend (currently falls back to file)
+    type: file
+    file: stats.txt
+  leaderboard:
+    # How many entries the leaderboard / %treechopper_top_*% placeholders expose.
+    size: 10
+    # How often (seconds) the cached leaderboard and ranks are recomputed.
+    refresh-seconds: 60
+  # How often (seconds) pending stat changes are written to disk (also flushed on shutdown).
+  flush-seconds: 30
 
 # Auto-replant settings are applied after the full tree-felling sequence completes.
 auto-replant:

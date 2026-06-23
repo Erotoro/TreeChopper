@@ -1,0 +1,22 @@
+messages:
+  command:
+    usage: "&eUso: /{label} <reload|toggle|stats|top>"
+    reload:
+      success: "&aTreeChopper recargado. Troncos marcados cargados: {placedLogs}, interruptores de jugadores cargados: {playerToggles}."
+    toggle:
+      enabled: "&aTreeChopper activado."
+      disabled: "&cTreeChopper desactivado."
+      feature-disabled: "&cLa función de activación de TreeChopper está desactivada en la configuración."
+    stats:
+      header: "&2&l Estadísticas de TreeChopper"
+      trees: "&7Árboles talados: &a{trees}"
+      logs: "&7Troncos rotos: &a{logs}"
+      rank: "&7Posición en la clasificación: &a#{rank}"
+      disabled: "&cLas estadísticas están desactivadas en este servidor."
+    top:
+      header: "&2&l Mejores leñadores"
+      line: "&7#{pos} &f{name} &7- &a{trees} &7árboles, &a{logs} &7troncos"
+      empty: "&7Todavía no hay registros de tala de árboles."
+  errors:
+    no-permission: "&cNo tienes permiso para usar este comando."
+    player-only: "&cSolo los jugadores pueden usar este comando."

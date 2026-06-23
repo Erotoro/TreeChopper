@@ -1,0 +1,22 @@
+messages:
+  command:
+    usage: "&eVerwendung: /{label} <reload|toggle|stats|top>"
+    reload:
+      success: "&aTreeChopper neu geladen. Geladene markierte Stämme: {placedLogs}, geladene Spielerumschalter: {playerToggles}."
+    toggle:
+      enabled: "&aTreeChopper aktiviert."
+      disabled: "&cTreeChopper deaktiviert."
+      feature-disabled: "&cDie TreeChopper-Umschaltfunktion ist in der Konfiguration deaktiviert."
+    stats:
+      header: "&2&l TreeChopper-Statistiken"
+      trees: "&7Gefällte Bäume: &a{trees}"
+      logs: "&7Abgebaute Stämme: &a{logs}"
+      rank: "&7Rang in der Bestenliste: &a#{rank}"
+      disabled: "&cStatistiken sind auf diesem Server deaktiviert."
+    top:
+      header: "&2&l Beste Holzfäller"
+      line: "&7#{pos} &f{name} &7- &a{trees} &7Bäume, &a{logs} &7Stämme"
+      empty: "&7Es gibt noch keine Einträge zum Bäumefällen."
+  errors:
+    no-permission: "&cDu hast keine Berechtigung, diesen Befehl zu verwenden."
+    player-only: "&cDiesen Befehl können nur Spieler verwenden."

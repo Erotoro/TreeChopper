@@ -1,7 +1,7 @@
 name: TreeChopper
 version: ${version}
 main: me.erotoro.treechopper.TreeChopper
-api-version: '1.21'
+api-version: '1.16'
 description: Plugin for instant tree chopping
 author: Erotoro
 folia-supported: true
@@ -9,14 +9,21 @@ softdepend:
   - WorldGuard
   - GriefPrevention
   - CoreProtect
+  - PlaceholderAPI
 commands:
   treechopper:
     description: TreeChopper management commands
-    usage: /treechopper <reload|toggle>
+    usage: /treechopper <reload|toggle|stats|top>
 permissions:
   treechopper.reload:
     description: Allows reloading TreeChopper data without restarting the server
     default: op
   treechopper.toggle:
     description: Allows enabling or disabling TreeChopper per player
+    default: true
+  treechopper.stats:
+    description: Allows viewing your own TreeChopper statistics
+    default: true
+  treechopper.top:
+    description: Allows viewing the TreeChopper leaderboard
     default: true

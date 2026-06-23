@@ -1,0 +1,22 @@
+messages:
+  command:
+    usage: "&eUso: /{label} <reload|toggle|stats|top>"
+    reload:
+      success: "&aTreeChopper ricaricato. Tronchi contrassegnati caricati: {placedLogs}, preferenze dei giocatori caricate: {playerToggles}."
+    toggle:
+      enabled: "&aTreeChopper attivato."
+      disabled: "&cTreeChopper disattivato."
+      feature-disabled: "&cLa funzione di attivazione di TreeChopper è disabilitata nella configurazione."
+    stats:
+      header: "&2&l Statistiche di TreeChopper"
+      trees: "&7Alberi abbattuti: &a{trees}"
+      logs: "&7Tronchi rotti: &a{logs}"
+      rank: "&7Posizione in classifica: &a#{rank}"
+      disabled: "&cLe statistiche sono disabilitate su questo server."
+    top:
+      header: "&2&l Migliori taglialegna"
+      line: "&7#{pos} &f{name} &7- &a{trees} &7alberi, &a{logs} &7tronchi"
+      empty: "&7Non ci sono ancora record di abbattimento degli alberi."
+  errors:
+    no-permission: "&cNon hai il permesso di usare questo comando."
+    player-only: "&cSolo i giocatori possono usare questo comando."

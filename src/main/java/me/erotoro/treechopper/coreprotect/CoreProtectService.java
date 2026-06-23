@@ -48,11 +48,16 @@ public final class CoreProtectService {
     }
 
     public void logRemoval(String actorName, BlockState originalState) {
-        if (actorName == null || actorName.isBlank() || originalState == null || TreeMaterials.isAir(originalState.getType())) {
+        if (api.isEmpty() || actorName == null || actorName.isBlank()
+                || originalState == null || TreeMaterials.isAir(originalState.getType())) {
             return;
         }
+        // Deliberately NOT a lambda: api.ifPresent(x -> x.logRemoval(...)) builds the lambda even when
+        // the Optional is empty, and that invokedynamic eagerly loads CoreProtectAPI — which then
+        // escapes the try/catch once JvmDowngrader desugars it. With the isEmpty() guard above, the
+        // CoreProtectAPI-referencing call below only runs when CoreProtect is actually installed.
         try {
-            api.ifPresent(coreProtectAPI -> coreProtectAPI.logRemoval(actorName, originalState));
+            api.get().logRemoval(actorName, originalState);
         } catch (NoClassDefFoundError error) {
             debug("CoreProtect classes are unavailable at runtime; removal logging skipped.");
         } catch (RuntimeException exception) {
@@ -63,11 +68,12 @@ public final class CoreProtectService {
     }
 
     public void logPlacement(String actorName, BlockState placedState) {
-        if (actorName == null || actorName.isBlank() || placedState == null || TreeMaterials.isAir(placedState.getType())) {
+        if (api.isEmpty() || actorName == null || actorName.isBlank()
+                || placedState == null || TreeMaterials.isAir(placedState.getType())) {
             return;
         }
         try {
-            api.ifPresent(coreProtectAPI -> coreProtectAPI.logPlacement(actorName, placedState));
+            api.get().logPlacement(actorName, placedState);
         } catch (NoClassDefFoundError error) {
             debug("CoreProtect classes are unavailable at runtime; placement logging skipped.");
         } catch (RuntimeException exception) {

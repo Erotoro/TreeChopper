@@ -1,0 +1,22 @@
+messages:
+  command:
+    usage: "&eUżycie: /{label} <reload|toggle|stats|top>"
+    reload:
+      success: "&aTreeChopper przeładowany. Wczytane oznaczone kłody: {placedLogs}, wczytane przełączniki graczy: {playerToggles}."
+    toggle:
+      enabled: "&aTreeChopper włączony."
+      disabled: "&cTreeChopper wyłączony."
+      feature-disabled: "&cFunkcja przełączania TreeChopper jest wyłączona w konfiguracji."
+    stats:
+      header: "&2&l Statystyki TreeChopper"
+      trees: "&7Ścięte drzewa: &a{trees}"
+      logs: "&7Rozbite kłody: &a{logs}"
+      rank: "&7Pozycja w rankingu: &a#{rank}"
+      disabled: "&cStatystyki są wyłączone na tym serwerze."
+    top:
+      header: "&2&l Najlepsi drwale"
+      line: "&7#{pos} &f{name} &7- &a{trees} &7drzew, &a{logs} &7kłód"
+      empty: "&7Brak jeszcze zapisów ścinania drzew."
+  errors:
+    no-permission: "&cNie masz uprawnień do użycia tej komendy."
+    player-only: "&cTej komendy mogą używać tylko gracze."

@@ -1,12 +1,22 @@
 messages:
   command:
-    usage: "&eВикористання: /{label} <reload|toggle>"
+    usage: "&eВикористання: /{label} <reload|toggle|stats|top>"
     reload:
       success: "&aTreeChopper перезавантажено. Завантажено позначених колод: {placedLogs}, завантажено перемикачів гравців: {playerToggles}."
     toggle:
       enabled: "&aTreeChopper увімкнено."
       disabled: "&cTreeChopper вимкнено."
       feature-disabled: "&cФункцію перемикання TreeChopper вимкнено у конфігурації."
+    stats:
+      header: "&2&l Статистика TreeChopper"
+      trees: "&7Зрубано дерев: &a{trees}"
+      logs: "&7Зламано колод: &a{logs}"
+      rank: "&7Місце в топі: &a#{rank}"
+      disabled: "&cСтатистику на цьому сервері вимкнено."
+    top:
+      header: "&2&l Топ лісорубів"
+      line: "&7#{pos} &f{name} &7- &a{trees} &7дер., &a{logs} &7колод"
+      empty: "&7Поки немає записів про рубку дерев."
   errors:
     no-permission: "&cУ вас немає прав для використання цієї команди."
     player-only: "&cЦю команду можуть використовувати лише гравці."

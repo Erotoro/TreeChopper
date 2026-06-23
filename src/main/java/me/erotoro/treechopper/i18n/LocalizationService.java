@@ -20,7 +20,9 @@ import java.util.logging.Logger;
 public final class LocalizationService {
 
     private static final String DEFAULT_LANGUAGE_CODE = "en";
-    private static final Set<String> SUPPORTED_LANGUAGES = Set.of("en", "ru", "uk");
+    private static final Set<String> SUPPORTED_LANGUAGES = Set.of(
+            "en", "ru", "uk", "pl", "de", "fr", "es", "it", "cs"
+    );
 
     private final JavaPlugin plugin;
     private final Logger logger;
@@ -39,9 +41,9 @@ public final class LocalizationService {
     public void load(FileConfiguration config) {
         Objects.requireNonNull(config, "config");
         ensureLanguageDirectory();
-        ensureLanguageFileExists("en");
-        ensureLanguageFileExists("ru");
-        ensureLanguageFileExists("uk");
+        for (String languageCode : SUPPORTED_LANGUAGES) {
+            ensureLanguageFileExists(languageCode);
+        }
 
         String configuredDefault = normalizeLanguageCode(config.getString("language.default", DEFAULT_LANGUAGE_CODE));
         String configuredFallback = normalizeLanguageCode(config.getString("language.fallback", DEFAULT_LANGUAGE_CODE));

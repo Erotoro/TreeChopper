@@ -3,6 +3,9 @@ package me.erotoro.treechopper;
 import me.erotoro.treechopper.model.BlockKey;
 import me.erotoro.treechopper.model.BreakPlan;
 import me.erotoro.treechopper.model.TreeSearchResult;
+import me.erotoro.treechopper.compat.EnchantmentCompat;
+import me.erotoro.treechopper.compat.FallingBlockCompat;
+import me.erotoro.treechopper.compat.FallingLogLandingListener;
 import me.erotoro.treechopper.coreprotect.CoreProtectService;
 import me.erotoro.treechopper.i18n.LocalizationService;
 import me.erotoro.treechopper.metrics.PluginMetricsBootstrap;
@@ -14,6 +17,10 @@ import me.erotoro.treechopper.replant.ReplantRequest;
 import me.erotoro.treechopper.replant.SaplingInventoryService;
 import me.erotoro.treechopper.replant.SaplingResolver;
 import me.erotoro.treechopper.scheduler.TaskSchedulerFacade;
+import me.erotoro.treechopper.stats.PlayerStats;
+import me.erotoro.treechopper.stats.StatsExpansion;
+import me.erotoro.treechopper.stats.StatsService;
+import me.erotoro.treechopper.stats.StatsSettings;
 import me.erotoro.treechopper.storage.PlacedLogPersistence;
 import me.erotoro.treechopper.toggle.PlayerTogglePersistence;
 import me.erotoro.treechopper.toggle.PlayerToggleService;
@@ -27,7 +34,6 @@ import org.bukkit.block.BlockState;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
-import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.FallingBlock;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -38,6 +44,8 @@ import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -82,6 +90,7 @@ public final class TreeChopper extends JavaPlugin implements Listener {
     private volatile File placedLogsFile;
     private volatile File playerTogglesFile;
     private volatile PlayerToggleService playerToggleService;
+    private volatile StatsService statsService;
     private volatile LocalizationService localizationService;
     private final AtomicBoolean placedLogsDirty = new AtomicBoolean();
     private volatile TreeChopperSettings settings = TreeChopperSettings.DEFAULT;
@@ -130,12 +139,31 @@ public final class TreeChopper extends JavaPlugin implements Listener {
             getLogger().warning("Failed to create plugin data folder: " + getDataFolder());
         }
         pluginManager.registerEvents(this, this);
+        // On versions without FallingBlock#setCancelDrop (~1.16–1.18) we cannot stop our cosmetic
+        // falling logs from reforming into blocks on landing, so register a targeted fallback
+        // listener. Newer versions use setCancelDrop and intentionally register no such listener.
+        if (!FallingBlockCompat.isSupported()) {
+            pluginManager.registerEvents(new FallingLogLandingListener(activeFallingBlocks), this);
+        }
         if (getCommand("treechopper") != null) {
             getCommand("treechopper").setExecutor(this);
             getCommand("treechopper").setTabCompleter(this);
         }
         loadPlacedLogs();
         playerToggleService.load();
+
+        StatsSettings statsSettings = StatsSettings.load(getConfig());
+        statsService = StatsService.create(statsSettings, getDataFolder().toPath(), getLogger());
+        statsService.start();
+        if (statsService.isEnabled() && pluginManager.getPlugin("PlaceholderAPI") != null) {
+            try {
+                new StatsExpansion(statsService, getDescription().getVersion()).register();
+                getLogger().info("Registered PlaceholderAPI expansion 'treechopper'.");
+            } catch (Throwable throwable) {
+                getLogger().warning("Failed to register PlaceholderAPI expansion: " + throwable.getMessage());
+            }
+        }
+
         getLogger().info("TreeChopper loaded. Region scheduler: " + scheduler.isRegionSchedulerAvailable()
                 + ", placed logs: " + playerPlacedLogs.size()
                 + ", player toggles: " + playerToggleService.size());
@@ -145,6 +173,9 @@ public final class TreeChopper extends JavaPlugin implements Listener {
     public void onDisable() {
         savePlacedLogsIfDirty();
         savePlayerTogglesIfDirty();
+        if (statsService != null) {
+            statsService.shutdown();
+        }
         if (scheduler != null) {
             scheduler.cancelAll();
         }
@@ -217,6 +248,56 @@ public final class TreeChopper extends JavaPlugin implements Listener {
             return true;
         }
 
+        if (args.length == 1 && args[0].equalsIgnoreCase("stats")) {
+            if (!(sender instanceof Player player)) {
+                sendLocalized(sender, "messages.errors.player-only");
+                return true;
+            }
+            if (!sender.hasPermission("treechopper.stats")) {
+                sendLocalized(sender, "messages.errors.no-permission");
+                return true;
+            }
+            StatsService stats = statsService;
+            if (stats == null || !stats.isEnabled()) {
+                sendLocalized(sender, "messages.command.stats.disabled");
+                return true;
+            }
+            PlayerStats playerStats = stats.getStats(player.getUniqueId(), player.getName());
+            int rank = stats.getRank(player.getUniqueId());
+            sendLocalized(sender, "messages.command.stats.header");
+            sendLocalized(sender, "messages.command.stats.trees", "trees", String.valueOf(playerStats.treesFelled()));
+            sendLocalized(sender, "messages.command.stats.logs", "logs", String.valueOf(playerStats.logsBroken()));
+            sendLocalized(sender, "messages.command.stats.rank", "rank", rank > 0 ? String.valueOf(rank) : "-");
+            return true;
+        }
+
+        if (args.length == 1 && args[0].equalsIgnoreCase("top")) {
+            if (!sender.hasPermission("treechopper.top")) {
+                sendLocalized(sender, "messages.errors.no-permission");
+                return true;
+            }
+            StatsService stats = statsService;
+            if (stats == null || !stats.isEnabled()) {
+                sendLocalized(sender, "messages.command.stats.disabled");
+                return true;
+            }
+            List<PlayerStats> board = stats.getLeaderboard();
+            if (board.isEmpty()) {
+                sendLocalized(sender, "messages.command.top.empty");
+                return true;
+            }
+            sendLocalized(sender, "messages.command.top.header");
+            int position = 1;
+            for (PlayerStats entry : board) {
+                sendLocalized(sender, "messages.command.top.line",
+                        "pos", String.valueOf(position++),
+                        "name", entry.name() == null ? "?" : entry.name(),
+                        "trees", String.valueOf(entry.treesFelled()),
+                        "logs", String.valueOf(entry.logsBroken()));
+            }
+            return true;
+        }
+
         sendLocalized(sender, "messages.command.usage", "label", label);
         return true;
     }
@@ -234,6 +315,12 @@ public final class TreeChopper extends JavaPlugin implements Listener {
             }
             if ("toggle".startsWith(prefix) && sender.hasPermission("treechopper.toggle")) {
                 completions.add("toggle");
+            }
+            if ("stats".startsWith(prefix) && sender.hasPermission("treechopper.stats")) {
+                completions.add("stats");
+            }
+            if ("top".startsWith(prefix) && sender.hasPermission("treechopper.top")) {
+                completions.add("top");
             }
             return completions;
         }
@@ -281,6 +368,22 @@ public final class TreeChopper extends JavaPlugin implements Listener {
         }
     }
 
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        StatsService stats = statsService;
+        if (stats != null) {
+            stats.onJoin(event.getPlayer().getUniqueId(), event.getPlayer().getName());
+        }
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        StatsService stats = statsService;
+        if (stats != null) {
+            stats.onQuit(event.getPlayer().getUniqueId());
+        }
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onTreeBreak(BlockBreakEvent event) {
         Block block = event.getBlock();
@@ -321,7 +424,7 @@ public final class TreeChopper extends JavaPlugin implements Listener {
             return;
         }
 
-        int unbreakingLevel = tool.getEnchantmentLevel(Enchantment.UNBREAKING);
+        int unbreakingLevel = EnchantmentCompat.unbreakingLevel(tool);
         int effectiveMaxBreaks;
         if (unbreakable) {
             effectiveMaxBreaks = settings.maxLogs();
@@ -453,6 +556,10 @@ public final class TreeChopper extends JavaPlugin implements Listener {
 
     private void onTreeFullyProcessed(Player player, Location treeAnchor, Set<Location> brokenLogLocations,
                                       TreeSearchResult result, boolean naturalTree) {
+        StatsService stats = statsService;
+        if (stats != null) {
+            stats.recordFell(player.getUniqueId(), player.getName(), brokenLogLocations.size());
+        }
         foliageBreakService.breakFoliage(player, brokenLogLocations, result.treeBlocks, result.logType);
         Location replantAnchor = resolveReplantAnchor(result, treeAnchor);
         autoReplantService.scheduleReplant(new ReplantRequest(
@@ -526,7 +633,7 @@ public final class TreeChopper extends JavaPlugin implements Listener {
         // EntityChangeBlockEvent. That lets us avoid any listener that would touch falling-block
         // state for entities we don't own — the access that spams Folia/Luminol region threads when
         // unrelated falling blocks (e.g. sand farms) land.
-        fallingBlock.setCancelDrop(true);
+        FallingBlockCompat.setCancelDrop(fallingBlock, true);
 
         double spreadX = spawnLocation.getX() - centerX;
         double spreadZ = spawnLocation.getZ() - centerZ;
